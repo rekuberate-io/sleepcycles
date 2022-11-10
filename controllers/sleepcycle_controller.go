@@ -63,17 +63,17 @@ const (
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.12.2/pkg/reconcile
 func (r *SleepCycleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	// log := log.FromContext(ctx)
-	log := log.Log.WithValues("namespace", req.Namespace, "sleepcycle", req.Name)
+	// logger := logger.FromContext(ctx)
+	logger := log.Log.WithValues("namespace", req.Namespace, "sleepcycle", req.Name)
 
 	var sleepCycle corev1alpha1.SleepCycle
 	if err := r.Get(ctx, req.NamespacedName, &sleepCycle); err != nil {
 		if apierrors.IsNotFound(err) {
-			log.Error(err, "⛔️ unable to find SleepCycle")
+			logger.Error(err, "⛔️ unable to find SleepCycle")
 			return ctrl.Result{}, nil
 		}
 
-		log.Error(err, "⛔️ unable to fetch SleepCycle")
+		logger.Error(err, "⛔️ unable to fetch SleepCycle")
 		return ctrl.Result{}, err
 	}
 
@@ -92,7 +92,7 @@ func (r *SleepCycleReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	newSleepCycle := *sleepCycle.DeepCopy()
 	currentOperation := r.GetCurrentScheduledOperation(sleepCycle)
 
-	log = log.WithValues("op", currentOperation.String())
+	logger = logger.WithValues("op", currentOperation.String())
 
 	for _, deployment := range deploymentList.Items {
 		sleepCycleRef, hasSleepCycle := deployment.Labels[DeploymentSleepCycleLabel]
@@ -101,7 +101,7 @@ func (r *SleepCycleReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			updateSleepCycleStatus = true
 			deploymentFullName := fmt.Sprintf("%v/%v", deployment.Namespace, deployment.Name)
 
-			log.Info("🔅 Processing Deployment", "deployment", deploymentFullName)
+			logger.Info("🔅 Processing Deployment", "deployment", deploymentFullName)
 
 			newSleepCycle.Status.Enabled = sleepCycle.Spec.Enabled
 
@@ -118,19 +118,19 @@ func (r *SleepCycleReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			switch currentOperation {
 			case Watch:
 			case Shutdown:
-				log.Info("⬇  Scale Down Deployment", "deployment", deploymentFullName, "replicas", 0)
+				logger.Info("⬇  Scale Down Deployment", "deployment", deploymentFullName, "replicas", 0)
 
-				err := r.ScaleDeployment(ctx, req, deployment, 0)
+				err := r.ScaleDeployment(ctx, deployment, 0)
 				if err != nil {
-					log.Error(err, "⛔️ failed to shutdown Deployment", "deployment", deploymentFullName)
+					logger.Error(err, "⛔️ failed to shutdown Deployment", "deployment", deploymentFullName)
 				}
 			case WakeUp:
 				wakeUpReplicas := int32(newSleepCycle.Status.UsedBy[deploymentFullName])
-				log.Info("⬆  Scale Up Deployment", "deployment", deploymentFullName, "replicas", wakeUpReplicas)
+				logger.Info("⬆  Scale Up Deployment", "deployment", deploymentFullName, "replicas", wakeUpReplicas)
 
-				err := r.ScaleDeployment(ctx, req, deployment, wakeUpReplicas)
+				err := r.ScaleDeployment(ctx, deployment, wakeUpReplicas)
 				if err != nil {
-					log.Error(err, "✖️ failed to wakeup deployment", "deployment", deploymentFullName)
+					logger.Error(err, "✖️ failed to wakeup deployment", "deployment", deploymentFullName)
 				}
 			}
 		}
@@ -146,18 +146,18 @@ func (r *SleepCycleReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		}
 
 		if err := r.Status().Update(ctx, &newSleepCycle); err != nil {
-			log.Error(err, "✖️ failed to update SleepCycle Status", "sleepcycle", sleepCycleFullName)
+			logger.Error(err, "✖️ failed to update SleepCycle Status", "sleepcycle", sleepCycleFullName)
 			return ctrl.Result{}, err
 		}
 	}
 
 	nextOperation, requeueAfter := r.GetNextScheduledOperation(sleepCycle)
-	log.Info("🔙 Requeue", "next-op", nextOperation.String(), "after", requeueAfter)
+	logger.Info("🔙 Requeue", "next-op", nextOperation.String(), "after", requeueAfter)
 
 	return ctrl.Result{RequeueAfter: requeueAfter}, nil
 }
 
-func (r *SleepCycleReconciler) ScaleDeployment(ctx context.Context, req ctrl.Request, deployment appsv1.Deployment, replicas int32) error {
+func (r *SleepCycleReconciler) ScaleDeployment(ctx context.Context, deployment appsv1.Deployment, replicas int32) error {
 	deepCopy := *deployment.DeepCopy()
 	*deepCopy.Spec.Replicas = replicas
 
@@ -169,10 +169,13 @@ func (r *SleepCycleReconciler) ScaleDeployment(ctx context.Context, req ctrl.Req
 }
 
 func (r *SleepCycleReconciler) WatchDeploymentsHandler(o client.Object) []ctrl.Request {
-	request := []ctrl.Request{}
+	var request []ctrl.Request
 
 	sleepCycleList := corev1alpha1.SleepCycleList{}
-	r.Client.List(context.Background(), &sleepCycleList)
+	err := r.Client.List(context.Background(), &sleepCycleList)
+	if err != nil {
+		return nil
+	}
 
 	for _, sleepCycle := range sleepCycleList.Items {
 		if !strings.HasPrefix(sleepCycle.Namespace, "kube-") {
@@ -202,7 +205,7 @@ func (r *SleepCycleReconciler) GetCurrentScheduledOperation(sleepCycle corev1alp
 	nextScheduledShutdown, nextScheduledWakeup := r.GetSchedulesTime(sleepCycle, true)
 	shutdownTimeWindow, wakeupTimeWindow := r.GetScheduleTimeWindows(sleepCycle, true)
 
-	var isWithinScheduleForShutdown, isWithinScheduleForWakeup bool = false, false
+	var isWithinScheduleForShutdown, isWithinScheduleForWakeup = false, false
 
 	isWithinScheduleForShutdown = shutdownTimeWindow.IsScheduleWithinWindow(time.Now())
 
