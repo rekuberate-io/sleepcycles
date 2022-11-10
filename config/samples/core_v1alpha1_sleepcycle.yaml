@@ -1,0 +1,8 @@
+apiVersion: core.rekuberate.io/v1alpha1
+kind: SleepCycle
+metadata:
+  name: sleepcycle-sample
+spec:
+  shutdown: "*/3 * * * *"
+  wakeup: "*/4 * * * *"
+  enabled: true

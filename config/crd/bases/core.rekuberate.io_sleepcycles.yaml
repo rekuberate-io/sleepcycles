@@ -1,0 +1,94 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.9.2
+  creationTimestamp: null
+  name: sleepcycles.core.rekuberate.io
+spec:
+  group: core.rekuberate.io
+  names:
+    kind: SleepCycle
+    listKind: SleepCycleList
+    plural: sleepcycles
+    singular: sleepcycle
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.shutdown
+      name: Shutdown
+      type: string
+    - jsonPath: .spec.wakeup
+      name: Wakeup
+      type: string
+    - jsonPath: .spec.enabled
+      name: Enabled
+      type: boolean
+    - jsonPath: .status.nextScheduledShutdown
+      name: Next Shutdown
+      type: string
+    - jsonPath: .status.nextScheduledWakeUp
+      name: Next Wake Up
+      type: string
+    - jsonPath: .status.lastLoop
+      name: Last Run
+      type: string
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: SleepCycle is the Schema for the sleepcycles API
+        properties:
+          apiVersion:
+            description: 'APIVersion defines the versioned schema of this representation
+              of an object. Servers should convert recognized schemas to the latest
+              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            type: string
+          kind:
+            description: 'Kind is a string value representing the REST resource this
+              object represents. Servers may infer this from the endpoint the client
+              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: SleepCycleSpec defines the desired state of SleepCycle
+            properties:
+              enabled:
+                type: boolean
+              shutdown:
+                pattern: (^((\*\/)?([0-5]?[0-9])((\,|\-|\/)([0-5]?[0-9]))*|\*)\s+((\*\/)?((2[0-3]|1[0-9]|[0-9]|00))((\,|\-|\/)(2[0-3]|1[0-9]|[0-9]|00))*|\*)\s+((\*\/)?([1-9]|[12][0-9]|3[01])((\,|\-|\/)([1-9]|[12][0-9]|3[01]))*|\*)\s+((\*\/)?([1-9]|1[0-2])((\,|\-|\/)([1-9]|1[0-2]))*|\*|(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|des))\s+((\*\/)?[0-6]((\,|\-|\/)[0-6])*|\*|00|(sun|mon|tue|wed|thu|fri|sat))\s*$)|@(annually|yearly|monthly|weekly|daily|hourly|reboot)
+                type: string
+              wakeup:
+                pattern: (^((\*\/)?([0-5]?[0-9])((\,|\-|\/)([0-5]?[0-9]))*|\*)\s+((\*\/)?((2[0-3]|1[0-9]|[0-9]|00))((\,|\-|\/)(2[0-3]|1[0-9]|[0-9]|00))*|\*)\s+((\*\/)?([1-9]|[12][0-9]|3[01])((\,|\-|\/)([1-9]|[12][0-9]|3[01]))*|\*)\s+((\*\/)?([1-9]|1[0-2])((\,|\-|\/)([1-9]|1[0-2]))*|\*|(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|des))\s+((\*\/)?[0-6]((\,|\-|\/)[0-6])*|\*|00|(sun|mon|tue|wed|thu|fri|sat))\s*$)|@(annually|yearly|monthly|weekly|daily|hourly|reboot)
+                type: string
+            required:
+            - enabled
+            - shutdown
+            type: object
+          status:
+            description: SleepCycleStatus defines the observed state of SleepCycle
+            properties:
+              enabled:
+                type: boolean
+              lastLoop:
+                format: date-time
+                type: string
+              nextScheduledOp:
+                type: string
+              nextScheduledShutdown:
+                format: date-time
+                type: string
+              nextScheduledWakeUp:
+                format: date-time
+                type: string
+              usedBy:
+                additionalProperties:
+                  type: integer
+                type: object
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

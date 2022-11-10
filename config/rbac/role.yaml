@@ -1,0 +1,33 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  creationTimestamp: null
+  name: manager-role
+rules:
+- apiGroups:
+  - core.rekuberate.io
+  resources:
+  - sleepcycles
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - core.rekuberate.io
+  resources:
+  - sleepcycles/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - core.rekuberate.io
+  resources:
+  - sleepcycles/status
+  verbs:
+  - get
+  - patch
+  - update

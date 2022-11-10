@@ -1,0 +1,16 @@
+domain: rekuberate.io
+layout:
+- go.kubebuilder.io/v3
+projectName: sleepcycles
+repo: github.com/rekuberate-io/sleepcycles
+resources:
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: rekuberate.io
+  group: core
+  kind: SleepCycle
+  path: github.com/rekuberate-io/sleepcycles/api/v1alpha1
+  version: v1alpha1
+version: "3"
