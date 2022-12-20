@@ -26,13 +26,11 @@ import (
 	corev1alpha1 "github.com/rekuberate-io/sleepcycles/api/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
 const (
@@ -63,7 +61,6 @@ const (
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.12.2/pkg/reconcile
 func (r *SleepCycleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	// logger := logger.FromContext(ctx)
 	logger := log.Log.WithValues("namespace", req.Namespace, "sleepcycle", req.Name)
 
 	var sleepCycle corev1alpha1.SleepCycle
@@ -76,6 +73,8 @@ func (r *SleepCycleReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		logger.Error(err, "⛔️ unable to fetch SleepCycle")
 		return ctrl.Result{}, err
 	}
+
+	isEarlierThanScheduled := r.IsEarlierThanScheduled(sleepCycle)
 
 	if !sleepCycle.Spec.Enabled {
 		return ctrl.Result{}, nil
@@ -94,43 +93,43 @@ func (r *SleepCycleReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 	logger = logger.WithValues("op", currentOperation.String())
 
-	for _, deployment := range deploymentList.Items {
-		sleepCycleRef, hasSleepCycle := deployment.Labels[DeploymentSleepCycleLabel]
+	if !isEarlierThanScheduled {
+		for _, deployment := range deploymentList.Items {
+			sleepCycleRef, hasSleepCycle := deployment.Labels[DeploymentSleepCycleLabel]
 
-		if hasSleepCycle && sleepCycleRef == sleepCycle.Name {
-			updateSleepCycleStatus = true
-			deploymentFullName := fmt.Sprintf("%v/%v", deployment.Namespace, deployment.Name)
+			if hasSleepCycle && sleepCycleRef == sleepCycle.Name {
+				updateSleepCycleStatus = true
+				deploymentFullName := fmt.Sprintf("%v/%v", deployment.Namespace, deployment.Name)
 
-			logger.Info("🔅 Processing Deployment", "deployment", deploymentFullName)
+				logger.Info("🔅 Processing Deployment", "deployment", deploymentFullName)
 
-			newSleepCycle.Status.Enabled = sleepCycle.Spec.Enabled
+				newSleepCycle.Status.Enabled = sleepCycle.Spec.Enabled
 
-			if newSleepCycle.Status.UsedBy == nil {
-				usedBy := make(map[string]int)
-				newSleepCycle.Status.UsedBy = usedBy
-			}
-
-			replicas := int(deployment.Status.Replicas)
-			if replicas > 0 {
-				newSleepCycle.Status.UsedBy[deploymentFullName] = replicas
-			}
-
-			switch currentOperation {
-			case Watch:
-			case Shutdown:
-				logger.Info("⬇  Scale Down Deployment", "deployment", deploymentFullName, "replicas", 0)
-
-				err := r.ScaleDeployment(ctx, deployment, 0)
-				if err != nil {
-					logger.Error(err, "⛔️ failed to shutdown Deployment", "deployment", deploymentFullName)
+				// fix map to accept int32 values
+				if newSleepCycle.Status.UsedBy == nil {
+					usedBy := make(map[string]int)
+					newSleepCycle.Status.UsedBy = usedBy
 				}
-			case WakeUp:
-				wakeUpReplicas := int32(newSleepCycle.Status.UsedBy[deploymentFullName])
-				logger.Info("⬆  Scale Up Deployment", "deployment", deploymentFullName, "replicas", wakeUpReplicas)
 
-				err := r.ScaleDeployment(ctx, deployment, wakeUpReplicas)
+				currentReplicas := int(deployment.Status.Replicas)
+				targetReplicas := int32(0)
+				if currentReplicas > 0 {
+					newSleepCycle.Status.UsedBy[deploymentFullName] = currentReplicas
+				}
+
+				switch currentOperation {
+				case Watch:
+				case Shutdown:
+					targetReplicas = 0
+					logger.Info("⬇  Scale Down Deployment", "deployment", deploymentFullName, "targetReplicas", targetReplicas)
+				case WakeUp:
+					targetReplicas = int32(newSleepCycle.Status.UsedBy[deploymentFullName])
+					logger.Info("⬆  Scale Up Deployment", "deployment", deploymentFullName, "targetReplicas", targetReplicas)
+				}
+
+				err := r.ScaleDeployment(ctx, deployment, targetReplicas)
 				if err != nil {
-					logger.Error(err, "✖️ failed to wakeup deployment", "deployment", deploymentFullName)
+					logger.Error(err, "✖️ Scaling Deployment failed", "deployment", deploymentFullName)
 				}
 			}
 		}
@@ -138,11 +137,11 @@ func (r *SleepCycleReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 	if updateSleepCycleStatus {
 		nextScheduledShutdown, nextScheduledWakeup := r.GetSchedulesTime(sleepCycle, false)
-		newSleepCycle.Status.NextScheduledShutdownTime = &v1.Time{Time: *nextScheduledShutdown}
-		newSleepCycle.Status.LastReconciliationLoop = &v1.Time{Time: time.Now()}
+		newSleepCycle.Status.NextScheduledShutdownTime = &metav1.Time{Time: *nextScheduledShutdown}
+		newSleepCycle.Status.LastReconciliationLoop = &metav1.Time{Time: time.Now()}
 
 		if nextScheduledWakeup != nil {
-			newSleepCycle.Status.NextScheduledWakeupTime = &v1.Time{Time: *nextScheduledWakeup}
+			newSleepCycle.Status.NextScheduledWakeupTime = &metav1.Time{Time: *nextScheduledWakeup}
 		}
 
 		if err := r.Status().Update(ctx, &newSleepCycle); err != nil {
@@ -151,10 +150,14 @@ func (r *SleepCycleReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		}
 	}
 
-	nextOperation, requeueAfter := r.GetNextScheduledOperation(sleepCycle)
-	logger.Info("🔙 Requeue", "next-op", nextOperation.String(), "after", requeueAfter)
+	if updateSleepCycleStatus {
+		nextOperation, requeueAfter := r.GetNextScheduledOperation(sleepCycle)
+		logger.Info("🔙 Requeue", "next-op", nextOperation.String(), "after", requeueAfter)
 
-	return ctrl.Result{RequeueAfter: requeueAfter}, nil
+		return ctrl.Result{RequeueAfter: requeueAfter}, nil
+	}
+
+	return ctrl.Result{}, nil
 }
 
 func (r *SleepCycleReconciler) ScaleDeployment(ctx context.Context, deployment appsv1.Deployment, replicas int32) error {
@@ -192,10 +195,10 @@ func (r *SleepCycleReconciler) WatchDeploymentsHandler(o client.Object) []ctrl.R
 func (r *SleepCycleReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&corev1alpha1.SleepCycle{}).
-		Watches(
-			&source.Kind{Type: &appsv1.Deployment{}},
-			handler.EnqueueRequestsFromMapFunc(r.WatchDeploymentsHandler),
-		).
+		//Watches(
+		//	&source.Kind{Type: &appsv1.Deployment{}},
+		//	handler.EnqueueRequestsFromMapFunc(r.WatchDeploymentsHandler),
+		//).
 		Complete(r)
 }
 
@@ -316,4 +319,22 @@ func (r *SleepCycleReconciler) GetSchedulesTime(sleepCycle corev1alpha1.SleepCyc
 	}
 
 	return shutdown, wakeup
+}
+
+func (r *SleepCycleReconciler) IsEarlierThanScheduled(sleepCycle corev1alpha1.SleepCycle) bool {
+	now := metav1.Time{Time: time.Now()}
+
+	if sleepCycle.Status.NextScheduledShutdownTime == nil {
+		return false
+	}
+
+	if now.Time.Before(sleepCycle.Status.NextScheduledShutdownTime.Time) && sleepCycle.Status.NextScheduledWakeupTime == nil {
+		return true
+	}
+
+	if now.Time.Before(sleepCycle.Status.NextScheduledShutdownTime.Time) && (sleepCycle.Status.NextScheduledWakeupTime != nil && now.Before(sleepCycle.Status.NextScheduledWakeupTime)) {
+		return true
+	}
+
+	return false
 }
