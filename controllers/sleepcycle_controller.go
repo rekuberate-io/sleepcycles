@@ -26,6 +26,7 @@ import (
 	"github.com/gorhill/cronexpr"
 	corev1alpha1 "github.com/rekuberate-io/sleepcycles/api/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
+	autoscalingv1 "k8s.io/api/autoscaling/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -86,15 +87,20 @@ func (r *SleepCycleReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	var updateSleepCycleStatus = false
 	var reconciliationSuccess = true
 	sleepCycleFullName := fmt.Sprintf("%v/%v", sleepCycle.Namespace, sleepCycle.Name)
-	newSleepCycle := *sleepCycle.DeepCopy()
 	currentOperation := r.GetCurrentScheduledOperation(sleepCycle)
+
+	deepCopy := *sleepCycle.DeepCopy()
+	if deepCopy.Status.UsedBy == nil {
+		usedBy := make(map[string]int)
+		deepCopy.Status.UsedBy = usedBy
+	}
 
 	r.logger = r.logger.WithValues("op", currentOperation.String())
 
 	if !isEarlierThanScheduled || !sleepCycle.Status.LastReconciliationLoopSuccess {
 		var err error
 
-		_, err = r.ReconcileDeployments(ctx, req, &sleepCycle, &newSleepCycle, &updateSleepCycleStatus, currentOperation)
+		_, err = r.ReconcileDeployments(ctx, req, &sleepCycle, &deepCopy, &updateSleepCycleStatus, currentOperation)
 		if err != nil {
 			reconciliationSuccess = false
 			updateSleepCycleStatus = true
@@ -106,7 +112,13 @@ func (r *SleepCycleReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			updateSleepCycleStatus = true
 		}
 
-		_, err = r.ReconcileStatefulSets(ctx, req, &sleepCycle, &newSleepCycle, &updateSleepCycleStatus, currentOperation)
+		_, err = r.ReconcileStatefulSets(ctx, req, &sleepCycle, &deepCopy, &updateSleepCycleStatus, currentOperation)
+		if err != nil {
+			reconciliationSuccess = false
+			updateSleepCycleStatus = true
+		}
+
+		_, err = r.ReconcileHorizontalPodAutoscalers(ctx, req, &sleepCycle, &deepCopy, &updateSleepCycleStatus, currentOperation)
 		if err != nil {
 			reconciliationSuccess = false
 			updateSleepCycleStatus = true
@@ -115,15 +127,15 @@ func (r *SleepCycleReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 	if updateSleepCycleStatus {
 		nextScheduledShutdown, nextScheduledWakeup := r.GetSchedulesTime(sleepCycle, false)
-		newSleepCycle.Status.NextScheduledShutdownTime = &metav1.Time{Time: *nextScheduledShutdown}
-		newSleepCycle.Status.LastReconciliationLoop = &metav1.Time{Time: time.Now()}
-		newSleepCycle.Status.LastReconciliationLoopSuccess = reconciliationSuccess
+		deepCopy.Status.NextScheduledShutdownTime = &metav1.Time{Time: *nextScheduledShutdown}
+		deepCopy.Status.LastReconciliationLoop = &metav1.Time{Time: time.Now()}
+		deepCopy.Status.LastReconciliationLoopSuccess = reconciliationSuccess
 
 		if nextScheduledWakeup != nil {
-			newSleepCycle.Status.NextScheduledWakeupTime = &metav1.Time{Time: *nextScheduledWakeup}
+			deepCopy.Status.NextScheduledWakeupTime = &metav1.Time{Time: *nextScheduledWakeup}
 		}
 
-		if err := r.Status().Update(ctx, &newSleepCycle); err != nil {
+		if err := r.Status().Update(ctx, &deepCopy); err != nil {
 			r.logger.Error(err, "🛑️ failed to update SleepCycle Status", "sleepcycle", sleepCycleFullName)
 			return ctrl.Result{}, err
 		}
@@ -153,6 +165,17 @@ func (r *SleepCycleReconciler) ScaleDeployment(ctx context.Context, deployment a
 func (r *SleepCycleReconciler) ScaleStatefulSet(ctx context.Context, statefulSet appsv1.StatefulSet, replicas int32) error {
 	deepCopy := *statefulSet.DeepCopy()
 	*deepCopy.Spec.Replicas = replicas
+
+	if err := r.Update(ctx, &deepCopy); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (r *SleepCycleReconciler) ScaleHorizontalPodAutoscaler(ctx context.Context, hpa autoscalingv1.HorizontalPodAutoscaler, replicas int32) error {
+	deepCopy := *hpa.DeepCopy()
+	deepCopy.Spec.MaxReplicas = replicas
 
 	if err := r.Update(ctx, &deepCopy); err != nil {
 		return err
@@ -196,10 +219,6 @@ func (r *SleepCycleReconciler) WatchDeploymentsHandler(o client.Object) []ctrl.R
 func (r *SleepCycleReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&corev1alpha1.SleepCycle{}).
-		//Watches(
-		//	&source.Kind{Type: &appsv1.Deployment{}},
-		//	handler.EnqueueRequestsFromMapFunc(r.WatchDeploymentsHandler),
-		//).
 		Complete(r)
 }
 
@@ -373,14 +392,9 @@ func (r *SleepCycleReconciler) ReconcileDeployments(
 			deploymentFullName := fmt.Sprintf("%v/%v", deployment.Namespace, deployment.Name)
 			deepCopy.Status.Enabled = sleepCycle.Spec.Enabled
 
-			// fix map to accept int32 values
-			if deepCopy.Status.UsedBy == nil {
-				usedBy := make(map[string]int)
-				deepCopy.Status.UsedBy = usedBy
-			}
-
 			currentReplicas := int(deployment.Status.Replicas)
-			if currentReplicas > 0 {
+			val, ok := deepCopy.Status.UsedBy[deploymentFullName]
+			if ok && val < currentReplicas && currentReplicas > 0 {
 				deepCopy.Status.UsedBy[deploymentFullName] = currentReplicas
 			}
 
@@ -487,14 +501,9 @@ func (r *SleepCycleReconciler) ReconcileStatefulSets(
 			statefulSetFullName := fmt.Sprintf("%v/%v", statefulSet.Namespace, statefulSet.Name)
 			deepCopy.Status.Enabled = sleepCycle.Spec.Enabled
 
-			// fix map to accept int32 values
-			if deepCopy.Status.UsedBy == nil {
-				usedBy := make(map[string]int)
-				deepCopy.Status.UsedBy = usedBy
-			}
-
 			currentReplicas := int(statefulSet.Status.Replicas)
-			if currentReplicas > 0 || currentReplicas > deepCopy.Status.UsedBy[statefulSetFullName] {
+			val, ok := deepCopy.Status.UsedBy[statefulSetFullName]
+			if ok && val < currentReplicas && currentReplicas > 0 {
 				deepCopy.Status.UsedBy[statefulSetFullName] = currentReplicas
 			}
 
@@ -519,6 +528,66 @@ func (r *SleepCycleReconciler) ReconcileStatefulSets(
 					err := r.ScaleStatefulSet(ctx, statefulSet, targetReplicas)
 					if err != nil {
 						r.logger.Error(err, "🛑️ Scaling StatefulSet failed", "statefulSet", statefulSetFullName)
+						return ctrl.Result{}, err
+					}
+				}
+			}
+		}
+	}
+
+	return ctrl.Result{}, nil
+}
+
+func (r *SleepCycleReconciler) ReconcileHorizontalPodAutoscalers(
+	ctx context.Context,
+	req ctrl.Request,
+	sleepCycle *corev1alpha1.SleepCycle,
+	deepCopy *corev1alpha1.SleepCycle,
+	update *bool,
+	op SleepCycleOperation,
+) (ctrl.Result, error) {
+	hpaList := autoscalingv1.HorizontalPodAutoscalerList{}
+	if err := r.List(ctx, &hpaList, &client.ListOptions{Namespace: req.NamespacedName.Namespace}); err != nil {
+		return ctrl.Result{}, err
+	}
+
+	r.logger.Info("📈 Processing HorizontalPodAutoscalers")
+
+	for _, hpa := range hpaList.Items {
+		hasSleepCycle := r.IsTagged(&hpa.ObjectMeta, sleepCycle.Name)
+
+		if hasSleepCycle {
+			*update = true
+			hpaFullName := fmt.Sprintf("%v/%v", hpa.Namespace, hpa.Name)
+			deepCopy.Status.Enabled = sleepCycle.Spec.Enabled
+
+			maxReplicas := int(hpa.Spec.MaxReplicas)
+			val, ok := deepCopy.Status.UsedBy[hpaFullName]
+			if ok && val < maxReplicas && maxReplicas > 0 {
+				deepCopy.Status.UsedBy[hpaFullName] = maxReplicas
+			}
+
+			switch op {
+			case Watch:
+			case Shutdown:
+				if hpa.Spec.MaxReplicas != 1 {
+					r.logger.Info("⬇  Scale Down HorizontalPodAutoscaler", "hpa", hpaFullName, "maxReplicas", 1)
+
+					err := r.ScaleHorizontalPodAutoscaler(ctx, hpa, 1)
+					if err != nil {
+						r.logger.Error(err, "🛑️ Scaling HorizontalPodAutoscaler failed", "hpa", hpaFullName)
+						return ctrl.Result{}, err
+					}
+				}
+			case WakeUp:
+				targetReplicas := int32(deepCopy.Status.UsedBy[hpaFullName])
+
+				if hpa.Spec.MaxReplicas != targetReplicas {
+					r.logger.Info("⬆  Scale Up HorizontalPodAutoscaler", "hpa", hpaFullName, "maxReplicas", targetReplicas)
+
+					err := r.ScaleHorizontalPodAutoscaler(ctx, hpa, targetReplicas)
+					if err != nil {
+						r.logger.Error(err, "🛑️ Scaling HorizontalPodAutoscaler failed", "hpa", hpaFullName)
 						return ctrl.Result{}, err
 					}
 				}

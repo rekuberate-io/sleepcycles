@@ -2,8 +2,7 @@
   <img width="256" height="250" src="https://github.com/rekuberate-io/sleepcycles/blob/main/docs/images/rekuberate-sleepcycle-logo.png?raw=true">
 </p>
 
-Define sleep & wake up cycles for your Kubernetes Deployments. Automatically schedule to shutdown deployments that occupy resources in your cluster and wake them up only when you need them, reducing that way the overall power consumption.
-
+Define sleep & wake up cycles for your Kubernetes resources. Automatically schedule to shutdown Deployments, CronJobs, StatefulSets and HorizontalPodAutoscalers that occupy resources in your cluster and wake them up only when you need them, reducing that way the overall power consumption.
 ## Getting Started
 You’ll need a Kubernetes cluster to run against. You can use [KIND](https://sigs.k8s.io/kind) or [K3D](https://k3d.io) to get a local cluster for testing, or run against a remote cluster.
 **Note:** Your controller will automatically use the current context in your kubeconfig file (i.e. whatever cluster `kubectl cluster-info` shows).
