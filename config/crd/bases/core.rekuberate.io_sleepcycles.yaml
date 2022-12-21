@@ -74,6 +74,8 @@ spec:
               lastLoop:
                 format: date-time
                 type: string
+              lastLoopSuccess:
+                type: boolean
               nextScheduledOp:
                 type: string
               nextScheduledShutdown:

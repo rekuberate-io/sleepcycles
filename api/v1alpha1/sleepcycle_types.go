@@ -40,12 +40,13 @@ type SleepCycleSpec struct {
 
 // SleepCycleStatus defines the observed state of SleepCycle
 type SleepCycleStatus struct {
-	UsedBy                    map[string]int `json:"usedBy,omitempty"`
-	Enabled                   bool           `json:"enabled,omitempty"`
-	NextScheduledShutdownTime *metav1.Time   `json:"nextScheduledShutdown,omitempty"`
-	NextScheduledWakeupTime   *metav1.Time   `json:"nextScheduledWakeUp,omitempty"`
-	NextScheduledOp           string         `json:"nextScheduledOp,omitempty"`
-	LastReconciliationLoop    *metav1.Time   `json:"lastLoop,omitempty"`
+	UsedBy                        map[string]int `json:"usedBy,omitempty"`
+	Enabled                       bool           `json:"enabled,omitempty"`
+	NextScheduledShutdownTime     *metav1.Time   `json:"nextScheduledShutdown,omitempty"`
+	NextScheduledWakeupTime       *metav1.Time   `json:"nextScheduledWakeUp,omitempty"`
+	NextScheduledOp               string         `json:"nextScheduledOp,omitempty"`
+	LastReconciliationLoop        *metav1.Time   `json:"lastLoop,omitempty"`
+	LastReconciliationLoopSuccess bool           `json:"lastLoopSuccess,omitempty"`
 }
 
 //+kubebuilder:object:root=true
