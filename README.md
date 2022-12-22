@@ -72,7 +72,7 @@ make undeploy
 ```
 
 ## Contributing
-// TODO(user): Add detailed information on how you would like others to contribute to this project
+Please refer to our [Contributing Guidelines](CONTRIBUTING.md)
 
 ### How it works
 This project aims to follow the Kubernetes [Operator pattern](https://kubernetes.io/docs/concepts/extend-kubernetes/operator/)
@@ -96,6 +96,8 @@ make run
 <p align="center">
   <img width="768" height="256" src="https://github.com/rekuberate-io/sleepcycles/blob/main/docs/images/SCR-20221222-hij.png?raw=true">
 </p>
+
+![debugging the controller](docs/images/SCR-20221222-hij.png)
 
 **NOTE:** You can also run this in one step by running: `make install run`
 
