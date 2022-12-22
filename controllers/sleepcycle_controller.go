@@ -78,16 +78,15 @@ func (r *SleepCycleReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, err
 	}
 
-	isEarlierThanScheduled := r.IsEarlierThanScheduled(sleepCycle)
+	thisRunIsSuccessful := true
+	lastRunWasSuccessful := sleepCycle.Status.LastRunWasSuccessful
+	isScheduledReentry := !r.isNotScheduledReentry(sleepCycle)
+	currentOperation := r.getCurrentScheduledOperation(sleepCycle)
+	sleepCycleFullName := fmt.Sprintf("%v/%v", sleepCycle.Namespace, sleepCycle.Name)
 
 	if !sleepCycle.Spec.Enabled {
 		return ctrl.Result{}, nil
 	}
-
-	var updateSleepCycleStatus = false
-	var reconciliationSuccess = true
-	sleepCycleFullName := fmt.Sprintf("%v/%v", sleepCycle.Namespace, sleepCycle.Name)
-	currentOperation := r.GetCurrentScheduledOperation(sleepCycle)
 
 	deepCopy := *sleepCycle.DeepCopy()
 	if deepCopy.Status.UsedBy == nil {
@@ -97,58 +96,56 @@ func (r *SleepCycleReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 	r.logger = r.logger.WithValues("op", currentOperation.String())
 
-	if !isEarlierThanScheduled || !sleepCycle.Status.LastReconciliationLoopSuccess {
+	if isScheduledReentry || !lastRunWasSuccessful {
 		var err error
 
-		_, err = r.ReconcileDeployments(ctx, req, &sleepCycle, &deepCopy, &updateSleepCycleStatus, currentOperation)
+		_, err = r.ReconcileDeployments(ctx, req, &sleepCycle, &deepCopy, currentOperation)
 		if err != nil {
-			reconciliationSuccess = false
-			updateSleepCycleStatus = true
+			thisRunIsSuccessful = false
 		}
 
-		_, err = r.ReconcileCronJobs(ctx, req, &sleepCycle, &updateSleepCycleStatus, currentOperation)
+		_, err = r.ReconcileCronJobs(ctx, req, &sleepCycle, currentOperation)
 		if err != nil {
-			reconciliationSuccess = false
-			updateSleepCycleStatus = true
+			thisRunIsSuccessful = false
 		}
 
-		_, err = r.ReconcileStatefulSets(ctx, req, &sleepCycle, &deepCopy, &updateSleepCycleStatus, currentOperation)
+		_, err = r.ReconcileStatefulSets(ctx, req, &sleepCycle, &deepCopy, currentOperation)
 		if err != nil {
-			reconciliationSuccess = false
-			updateSleepCycleStatus = true
+			thisRunIsSuccessful = false
 		}
 
-		_, err = r.ReconcileHorizontalPodAutoscalers(ctx, req, &sleepCycle, &deepCopy, &updateSleepCycleStatus, currentOperation)
+		_, err = r.ReconcileHorizontalPodAutoscalers(ctx, req, &sleepCycle, &deepCopy, currentOperation)
 		if err != nil {
-			reconciliationSuccess = false
-			updateSleepCycleStatus = true
+			thisRunIsSuccessful = false
 		}
 	}
 
-	if updateSleepCycleStatus {
-		nextScheduledShutdown, nextScheduledWakeup := r.GetSchedulesTime(sleepCycle, false)
-		deepCopy.Status.NextScheduledShutdownTime = &metav1.Time{Time: *nextScheduledShutdown}
-		deepCopy.Status.LastReconciliationLoop = &metav1.Time{Time: time.Now()}
-		deepCopy.Status.LastReconciliationLoopSuccess = reconciliationSuccess
+	nextScheduledShutdown, nextScheduledWakeup := r.getSchedulesTime(sleepCycle, false)
+	deepCopy.Status.NextScheduledShutdownTime = &metav1.Time{Time: *nextScheduledShutdown}
 
-		if nextScheduledWakeup != nil {
-			deepCopy.Status.NextScheduledWakeupTime = &metav1.Time{Time: *nextScheduledWakeup}
-		}
-
-		if err := r.Status().Update(ctx, &deepCopy); err != nil {
-			r.logger.Error(err, "🛑️ failed to update SleepCycle Status", "sleepcycle", sleepCycleFullName)
-			return ctrl.Result{}, err
-		}
+	if currentOperation != Watch {
+		deepCopy.Status.LastRunTime = &metav1.Time{Time: time.Now()}
+		deepCopy.Status.LastRunWasSuccessful = thisRunIsSuccessful
 	}
 
-	if updateSleepCycleStatus {
-		nextOperation, requeueAfter := r.GetNextScheduledOperation(sleepCycle)
+	if nextScheduledWakeup != nil {
+		deepCopy.Status.NextScheduledWakeupTime = &metav1.Time{Time: *nextScheduledWakeup}
+	}
+
+	if err := r.Status().Update(ctx, &deepCopy); err != nil {
+		r.logger.Error(err, "🛑️ failed to update SleepCycle Status", "sleepcycle", sleepCycleFullName)
+		return ctrl.Result{}, err
+	}
+
+	nextOperation, requeueAfter := r.getNextScheduledOperation(sleepCycle, &currentOperation)
+
+	if currentOperation == Watch {
+		r.logger.V(10).Info("🔁 Requeue", "next-op", nextOperation.String(), "after", requeueAfter)
+	} else {
 		r.logger.Info("🔁 Requeue", "next-op", nextOperation.String(), "after", requeueAfter)
-
-		return ctrl.Result{RequeueAfter: requeueAfter}, nil
 	}
 
-	return ctrl.Result{}, nil
+	return ctrl.Result{RequeueAfter: requeueAfter}, nil
 }
 
 func (r *SleepCycleReconciler) ScaleDeployment(ctx context.Context, deployment appsv1.Deployment, replicas int32) error {
@@ -222,159 +219,11 @@ func (r *SleepCycleReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-func (r *SleepCycleReconciler) GetCurrentScheduledOperation(sleepCycle corev1alpha1.SleepCycle) (nextScheduledOperation SleepCycleOperation) {
-
-	nextScheduledOperation = Watch
-	nextScheduledShutdown, nextScheduledWakeup := r.GetSchedulesTime(sleepCycle, true)
-	shutdownTimeWindow, wakeupTimeWindow := r.GetScheduleTimeWindows(sleepCycle, true)
-
-	var isWithinScheduleForShutdown, isWithinScheduleForWakeup = false, false
-
-	isWithinScheduleForShutdown = shutdownTimeWindow.IsScheduleWithinWindow(time.Now())
-
-	if wakeupTimeWindow != nil {
-		isWithinScheduleForWakeup = wakeupTimeWindow.IsScheduleWithinWindow(time.Now())
-	}
-
-	if nextScheduledWakeup == nil {
-		nextScheduledOperation = Shutdown
-		return nextScheduledOperation
-	}
-
-	if nextScheduledShutdown.Before(*nextScheduledWakeup) && isWithinScheduleForShutdown {
-		nextScheduledOperation = Shutdown
-		return nextScheduledOperation
-	}
-
-	if nextScheduledWakeup.Before(*nextScheduledShutdown) && isWithinScheduleForWakeup {
-		nextScheduledOperation = WakeUp
-		return nextScheduledOperation
-	}
-
-	if isWithinScheduleForShutdown && isWithinScheduleForWakeup {
-		nextScheduledOperation = WakeUp
-	}
-
-	return nextScheduledOperation
-}
-
-func (r *SleepCycleReconciler) GetNextScheduledOperation(sleepCycle corev1alpha1.SleepCycle) (SleepCycleOperation, time.Duration) {
-	var requeueAfter time.Duration
-	currentOperation := r.GetCurrentScheduledOperation(sleepCycle)
-	nextScheduledShutdown, nextScheduledWakeup := r.GetSchedulesTime(sleepCycle, false)
-	var nextOperation SleepCycleOperation
-
-	switch currentOperation {
-	case Watch:
-		if nextScheduledWakeup == nil {
-			nextOperation = Shutdown
-			requeueAfter = time.Until(*nextScheduledShutdown)
-		} else {
-			if nextScheduledShutdown.Before(*nextScheduledWakeup) {
-				nextOperation = Shutdown
-				requeueAfter = time.Until(*nextScheduledShutdown)
-			} else {
-				nextOperation = WakeUp
-				requeueAfter = time.Until(*nextScheduledWakeup)
-			}
-		}
-	case Shutdown:
-		if nextScheduledWakeup == nil {
-			nextOperation = Shutdown
-			requeueAfter = time.Until(*nextScheduledShutdown)
-		} else {
-			nextOperation = WakeUp
-			requeueAfter = time.Until(*nextScheduledWakeup)
-		}
-	case WakeUp:
-		nextOperation = Shutdown
-		requeueAfter = time.Until(*nextScheduledShutdown)
-	}
-
-	return nextOperation, requeueAfter
-}
-
-func (r *SleepCycleReconciler) GetScheduleTimeWindows(sleepCycle corev1alpha1.SleepCycle, useStatus bool) (shutdown *TimeWindow, wakeup *TimeWindow) {
-	nextScheduledShutdown, nextScheduledWakeup := r.GetSchedulesTime(sleepCycle, useStatus)
-
-	shutdown = NewTimeWindow(*nextScheduledShutdown)
-
-	if nextScheduledWakeup != nil {
-		wakeup = NewTimeWindow(*nextScheduledWakeup)
-	}
-
-	return shutdown, wakeup
-}
-
-func (r *SleepCycleReconciler) GetSchedulesTime(sleepCycle corev1alpha1.SleepCycle, useStatus bool) (shutdown *time.Time, wakeup *time.Time) {
-
-	shutdown = nil
-	wakeup = nil
-
-	if useStatus {
-		if sleepCycle.Status.NextScheduledShutdownTime != nil {
-			shutdown = &sleepCycle.Status.NextScheduledShutdownTime.Time
-		} else {
-			t := cronexpr.MustParse(sleepCycle.Spec.Shutdown).Next(time.Now())
-			shutdown = &t
-		}
-
-		if sleepCycle.Status.NextScheduledWakeupTime != nil {
-			wakeup = &sleepCycle.Status.NextScheduledWakeupTime.Time
-		} else {
-			wakeupCronExpression, err := cronexpr.Parse(sleepCycle.Spec.WakeUp)
-			if err == nil {
-				t := wakeupCronExpression.Next(time.Now())
-				wakeup = &t
-			}
-		}
-	} else {
-		t := cronexpr.MustParse(sleepCycle.Spec.Shutdown).Next(time.Now())
-		shutdown = &t
-		wakeupCronExpression, err := cronexpr.Parse(sleepCycle.Spec.WakeUp)
-		if err == nil {
-			t := wakeupCronExpression.Next(time.Now())
-			wakeup = &t
-		}
-	}
-
-	return shutdown, wakeup
-}
-
-func (r *SleepCycleReconciler) IsEarlierThanScheduled(sleepCycle corev1alpha1.SleepCycle) bool {
-	now := metav1.Time{Time: time.Now()}
-
-	if sleepCycle.Status.NextScheduledShutdownTime == nil {
-		return false
-	}
-
-	if now.Time.Before(sleepCycle.Status.NextScheduledShutdownTime.Time) && sleepCycle.Status.NextScheduledWakeupTime == nil {
-		return true
-	}
-
-	if now.Time.Before(sleepCycle.Status.NextScheduledShutdownTime.Time) && (sleepCycle.Status.NextScheduledWakeupTime != nil && now.Before(sleepCycle.Status.NextScheduledWakeupTime)) {
-		return true
-	}
-
-	return false
-}
-
-func (r *SleepCycleReconciler) IsTagged(obj *metav1.ObjectMeta, tag string) bool {
-	val, ok := obj.GetLabels()[SleepCycleLabel]
-
-	if ok && val == tag {
-		return true
-	}
-
-	return false
-}
-
 func (r *SleepCycleReconciler) ReconcileDeployments(
 	ctx context.Context,
 	req ctrl.Request,
 	sleepCycle *corev1alpha1.SleepCycle,
 	deepCopy *corev1alpha1.SleepCycle,
-	update *bool,
 	op SleepCycleOperation,
 ) (ctrl.Result, error) {
 	deploymentList := appsv1.DeploymentList{}
@@ -385,16 +234,15 @@ func (r *SleepCycleReconciler) ReconcileDeployments(
 	r.logger.Info("📚 Processing Deployments")
 
 	for _, deployment := range deploymentList.Items {
-		hasSleepCycle := r.IsTagged(&deployment.ObjectMeta, sleepCycle.Name)
+		hasSleepCycle := r.isTagged(&deployment.ObjectMeta, sleepCycle.Name)
 
 		if hasSleepCycle {
-			*update = true
 			deploymentFullName := fmt.Sprintf("%v/%v", deployment.Namespace, deployment.Name)
 			deepCopy.Status.Enabled = sleepCycle.Spec.Enabled
 
 			currentReplicas := int(deployment.Status.Replicas)
 			val, ok := deepCopy.Status.UsedBy[deploymentFullName]
-			if ok && val < currentReplicas && currentReplicas > 0 {
+			if !ok || (ok && val < currentReplicas && currentReplicas > 0) {
 				deepCopy.Status.UsedBy[deploymentFullName] = currentReplicas
 			}
 
@@ -432,7 +280,6 @@ func (r *SleepCycleReconciler) ReconcileDeployments(
 func (r *SleepCycleReconciler) ReconcileCronJobs(ctx context.Context,
 	req ctrl.Request,
 	sleepCycle *corev1alpha1.SleepCycle,
-	update *bool,
 	op SleepCycleOperation,
 ) (ctrl.Result, error) {
 	cronJobList := batchv1.CronJobList{}
@@ -443,10 +290,9 @@ func (r *SleepCycleReconciler) ReconcileCronJobs(ctx context.Context,
 	r.logger.Info("🕑 Processing CronJobs")
 
 	for _, cronJob := range cronJobList.Items {
-		hasSleepCycle := r.IsTagged(&cronJob.ObjectMeta, sleepCycle.Name)
+		hasSleepCycle := r.isTagged(&cronJob.ObjectMeta, sleepCycle.Name)
 
 		if hasSleepCycle {
-			*update = true
 			cronJobFullName := fmt.Sprintf("%v/%v", cronJob.Namespace, cronJob.Name)
 
 			switch op {
@@ -483,7 +329,6 @@ func (r *SleepCycleReconciler) ReconcileStatefulSets(
 	req ctrl.Request,
 	sleepCycle *corev1alpha1.SleepCycle,
 	deepCopy *corev1alpha1.SleepCycle,
-	update *bool,
 	op SleepCycleOperation,
 ) (ctrl.Result, error) {
 	statefulSetList := appsv1.StatefulSetList{}
@@ -494,16 +339,15 @@ func (r *SleepCycleReconciler) ReconcileStatefulSets(
 	r.logger.Info("📦 Processing StatefulSets")
 
 	for _, statefulSet := range statefulSetList.Items {
-		hasSleepCycle := r.IsTagged(&statefulSet.ObjectMeta, sleepCycle.Name)
+		hasSleepCycle := r.isTagged(&statefulSet.ObjectMeta, sleepCycle.Name)
 
 		if hasSleepCycle {
-			*update = true
 			statefulSetFullName := fmt.Sprintf("%v/%v", statefulSet.Namespace, statefulSet.Name)
 			deepCopy.Status.Enabled = sleepCycle.Spec.Enabled
 
 			currentReplicas := int(statefulSet.Status.Replicas)
 			val, ok := deepCopy.Status.UsedBy[statefulSetFullName]
-			if ok && val < currentReplicas && currentReplicas > 0 {
+			if !ok || (ok && val < currentReplicas && currentReplicas > 0) {
 				deepCopy.Status.UsedBy[statefulSetFullName] = currentReplicas
 			}
 
@@ -543,7 +387,6 @@ func (r *SleepCycleReconciler) ReconcileHorizontalPodAutoscalers(
 	req ctrl.Request,
 	sleepCycle *corev1alpha1.SleepCycle,
 	deepCopy *corev1alpha1.SleepCycle,
-	update *bool,
 	op SleepCycleOperation,
 ) (ctrl.Result, error) {
 	hpaList := autoscalingv1.HorizontalPodAutoscalerList{}
@@ -554,16 +397,15 @@ func (r *SleepCycleReconciler) ReconcileHorizontalPodAutoscalers(
 	r.logger.Info("📈 Processing HorizontalPodAutoscalers")
 
 	for _, hpa := range hpaList.Items {
-		hasSleepCycle := r.IsTagged(&hpa.ObjectMeta, sleepCycle.Name)
+		hasSleepCycle := r.isTagged(&hpa.ObjectMeta, sleepCycle.Name)
 
 		if hasSleepCycle {
-			*update = true
 			hpaFullName := fmt.Sprintf("%v/%v", hpa.Namespace, hpa.Name)
 			deepCopy.Status.Enabled = sleepCycle.Spec.Enabled
 
 			maxReplicas := int(hpa.Spec.MaxReplicas)
 			val, ok := deepCopy.Status.UsedBy[hpaFullName]
-			if ok && val < maxReplicas && maxReplicas > 0 {
+			if !ok || (ok && val < maxReplicas && maxReplicas > 0) {
 				deepCopy.Status.UsedBy[hpaFullName] = maxReplicas
 			}
 
@@ -596,4 +438,155 @@ func (r *SleepCycleReconciler) ReconcileHorizontalPodAutoscalers(
 	}
 
 	return ctrl.Result{}, nil
+}
+
+func (r *SleepCycleReconciler) getCurrentScheduledOperation(sleepCycle corev1alpha1.SleepCycle) SleepCycleOperation {
+	nextScheduledShutdown, nextScheduledWakeup := r.getSchedulesTime(sleepCycle, true)
+	nextScheduledShutdownTimeWindow := r.getScheduleTimeWindow(nextScheduledShutdown)
+	nextScheduledWakeupTimeWindow := r.getScheduleTimeWindow(nextScheduledWakeup)
+
+	var isWithinScheduleForShutdown, isWithinScheduleForWakeup = false, false
+	isWithinScheduleForShutdown = nextScheduledShutdownTimeWindow.IsScheduleWithinWindow(time.Now())
+
+	if nextScheduledWakeup == nil && isWithinScheduleForShutdown {
+		return Shutdown
+	}
+
+	isWithinScheduleForWakeup = nextScheduledWakeupTimeWindow.IsScheduleWithinWindow(time.Now())
+
+	if nextScheduledShutdown.Before(*nextScheduledWakeup) && isWithinScheduleForShutdown {
+		return Shutdown
+	}
+
+	if nextScheduledWakeup.Before(*nextScheduledShutdown) && isWithinScheduleForWakeup {
+		return WakeUp
+	}
+
+	if isWithinScheduleForShutdown && isWithinScheduleForWakeup {
+		return WakeUp
+	}
+
+	return Watch
+}
+
+func (r *SleepCycleReconciler) getNextScheduledOperation(sleepCycle corev1alpha1.SleepCycle, currentOperation *SleepCycleOperation) (SleepCycleOperation, time.Duration) {
+	var requeueAfter time.Duration
+
+	if currentOperation == nil {
+		*currentOperation = r.getCurrentScheduledOperation(sleepCycle)
+	}
+
+	nextScheduledShutdown, nextScheduledWakeup := r.getSchedulesTime(sleepCycle, false)
+	var nextOperation SleepCycleOperation
+
+	switch *currentOperation {
+	case Watch:
+		if nextScheduledWakeup == nil {
+			nextOperation = Shutdown
+			requeueAfter = time.Until(*nextScheduledShutdown)
+		} else {
+			if nextScheduledShutdown.Before(*nextScheduledWakeup) {
+				nextOperation = Shutdown
+				requeueAfter = time.Until(*nextScheduledShutdown)
+			} else {
+				nextOperation = WakeUp
+				requeueAfter = time.Until(*nextScheduledWakeup)
+			}
+		}
+	case Shutdown:
+		if nextScheduledWakeup == nil {
+			nextOperation = Shutdown
+			requeueAfter = time.Until(*nextScheduledShutdown)
+		} else {
+			nextOperation = WakeUp
+			requeueAfter = time.Until(*nextScheduledWakeup)
+		}
+	case WakeUp:
+		nextOperation = Shutdown
+		requeueAfter = time.Until(*nextScheduledShutdown)
+	}
+
+	return nextOperation, requeueAfter
+}
+
+func (r *SleepCycleReconciler) getScheduleTimeWindow(timestamp *time.Time) *TimeWindow {
+	if timestamp != nil {
+		return NewTimeWindow(*timestamp)
+	}
+
+	return nil
+}
+
+func (r *SleepCycleReconciler) getSchedulesTime(sleepCycle corev1alpha1.SleepCycle, useStatus bool) (shutdown *time.Time, wakeup *time.Time) {
+
+	shutdown = nil
+	wakeup = nil
+
+	if !useStatus {
+		shutdown = r.getTimeFromCronExpression(sleepCycle.Spec.Shutdown)
+		wakeup = r.getTimeFromCronExpression(sleepCycle.Spec.WakeUp)
+	} else {
+		if sleepCycle.Status.NextScheduledWakeupTime != nil {
+			wakeupTimeWindow := NewTimeWindow(sleepCycle.Status.NextScheduledWakeupTime.Time)
+
+			if wakeupTimeWindow.Right.Before(time.Now()) {
+				wakeup = r.getTimeFromCronExpression(sleepCycle.Spec.WakeUp)
+			} else {
+				wakeup = &sleepCycle.Status.NextScheduledWakeupTime.Time
+			}
+		} else {
+			wakeup = r.getTimeFromCronExpression(sleepCycle.Spec.WakeUp)
+		}
+
+		if sleepCycle.Status.NextScheduledShutdownTime != nil {
+			shutdownTimeWindow := NewTimeWindow(sleepCycle.Status.NextScheduledShutdownTime.Time)
+
+			if shutdownTimeWindow.Right.Before(time.Now()) {
+				shutdown = r.getTimeFromCronExpression(sleepCycle.Spec.Shutdown)
+			} else {
+				shutdown = &sleepCycle.Status.NextScheduledShutdownTime.Time
+			}
+		} else {
+			shutdown = r.getTimeFromCronExpression(sleepCycle.Spec.Shutdown)
+		}
+	}
+
+	return shutdown, wakeup
+}
+
+func (r *SleepCycleReconciler) getTimeFromCronExpression(cronexp string) *time.Time {
+	cronExpression, err := cronexpr.Parse(cronexp)
+	if err == nil {
+		t := cronExpression.Next(time.Now())
+		return &t
+	}
+	return nil
+}
+
+func (r *SleepCycleReconciler) isNotScheduledReentry(sleepCycle corev1alpha1.SleepCycle) bool {
+	now := metav1.Time{Time: time.Now()}
+
+	if sleepCycle.Status.NextScheduledShutdownTime == nil {
+		return false
+	}
+
+	if now.Time.Before(sleepCycle.Status.NextScheduledShutdownTime.Time) && sleepCycle.Status.NextScheduledWakeupTime == nil {
+		return true
+	}
+
+	if now.Time.Before(sleepCycle.Status.NextScheduledShutdownTime.Time) && (sleepCycle.Status.NextScheduledWakeupTime != nil && now.Before(sleepCycle.Status.NextScheduledWakeupTime)) {
+		return true
+	}
+
+	return false
+}
+
+func (r *SleepCycleReconciler) isTagged(obj *metav1.ObjectMeta, tag string) bool {
+	val, ok := obj.GetLabels()[SleepCycleLabel]
+
+	if ok && val == tag {
+		return true
+	}
+
+	return false
 }

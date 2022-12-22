@@ -31,8 +31,11 @@ spec:
     - jsonPath: .status.nextScheduledWakeUp
       name: Next Wake Up
       type: string
-    - jsonPath: .status.lastLoop
+    - jsonPath: .status.lastRunTime
       name: Last Run
+      type: string
+    - jsonPath: .status.lastRunWasSuccessful
+      name: Last Run Success
       type: string
     name: v1alpha1
     schema:
@@ -71,10 +74,10 @@ spec:
             properties:
               enabled:
                 type: boolean
-              lastLoop:
+              lastRunTime:
                 format: date-time
                 type: string
-              lastLoopSuccess:
+              lastRunWasSuccessful:
                 type: boolean
               nextScheduledOp:
                 type: string

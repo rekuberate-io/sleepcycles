@@ -117,8 +117,8 @@ func (in *SleepCycleStatus) DeepCopyInto(out *SleepCycleStatus) {
 		in, out := &in.NextScheduledWakeupTime, &out.NextScheduledWakeupTime
 		*out = (*in).DeepCopy()
 	}
-	if in.LastReconciliationLoop != nil {
-		in, out := &in.LastReconciliationLoop, &out.LastReconciliationLoop
+	if in.LastRunTime != nil {
+		in, out := &in.LastRunTime, &out.LastRunTime
 		*out = (*in).DeepCopy()
 	}
 }

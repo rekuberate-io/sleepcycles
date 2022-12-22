@@ -40,13 +40,13 @@ type SleepCycleSpec struct {
 
 // SleepCycleStatus defines the observed state of SleepCycle
 type SleepCycleStatus struct {
-	UsedBy                        map[string]int `json:"usedBy,omitempty"`
-	Enabled                       bool           `json:"enabled,omitempty"`
-	NextScheduledShutdownTime     *metav1.Time   `json:"nextScheduledShutdown,omitempty"`
-	NextScheduledWakeupTime       *metav1.Time   `json:"nextScheduledWakeUp,omitempty"`
-	NextScheduledOp               string         `json:"nextScheduledOp,omitempty"`
-	LastReconciliationLoop        *metav1.Time   `json:"lastLoop,omitempty"`
-	LastReconciliationLoopSuccess bool           `json:"lastLoopSuccess,omitempty"`
+	UsedBy                    map[string]int `json:"usedBy,omitempty"`
+	Enabled                   bool           `json:"enabled,omitempty"`
+	NextScheduledShutdownTime *metav1.Time   `json:"nextScheduledShutdown,omitempty"`
+	NextScheduledWakeupTime   *metav1.Time   `json:"nextScheduledWakeUp,omitempty"`
+	NextScheduledOp           string         `json:"nextScheduledOp,omitempty"`
+	LastRunTime               *metav1.Time   `json:"lastRunTime,omitempty"`
+	LastRunWasSuccessful      bool           `json:"lastRunWasSuccessful,omitempty"`
 }
 
 //+kubebuilder:object:root=true
@@ -58,7 +58,8 @@ type SleepCycleStatus struct {
 // +kubebuilder:printcolumn:name="Enabled",type=boolean,JSONPath=`.spec.enabled`
 // +kubebuilder:printcolumn:name="Next Shutdown",type=string,JSONPath=`.status.nextScheduledShutdown`
 // +kubebuilder:printcolumn:name="Next Wake Up",type=string,JSONPath=`.status.nextScheduledWakeUp`
-// +kubebuilder:printcolumn:name="Last Run",type=string,JSONPath=`.status.lastLoop`
+// +kubebuilder:printcolumn:name="Last Run",type=string,JSONPath=`.status.lastRunTime`
+// +kubebuilder:printcolumn:name="Last Run Success",type=string,JSONPath=`.status.lastRunWasSuccessful`
 type SleepCycle struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
