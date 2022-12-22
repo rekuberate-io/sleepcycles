@@ -94,7 +94,7 @@ make run
 ```
 
 <p align="center">
-  <img width="256" height="250" src="https://github.com/rekuberate-io/sleepcycles/blob/main/docs/images/SCR-20221222-hij.png?raw=true">
+  <img width="768" height="256" src="https://github.com/rekuberate-io/sleepcycles/blob/main/docs/images/SCR-20221222-hij.png?raw=true">
 </p>
 
 **NOTE:** You can also run this in one step by running: `make install run`
