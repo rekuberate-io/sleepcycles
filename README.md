@@ -7,6 +7,37 @@ Define sleep & wake up cycles for your Kubernetes resources. Automatically sched
 You’ll need a Kubernetes cluster to run against. You can use [KIND](https://sigs.k8s.io/kind) or [K3D](https://k3d.io) to get a local cluster for testing, or run against a remote cluster.
 **Note:** Your controller will automatically use the current context in your kubeconfig file (i.e. whatever cluster `kubectl cluster-info` shows).
 
+Under `config/samples` you will find an example manifest that you can use to test this controller:
+
+```yaml
+apiVersion: core.rekuberate.io/v1alpha1
+kind: SleepCycle
+metadata:
+  name: sleepcycle-sample
+spec:
+  shutdown: "*/3 * * * *"
+  wakeup: "*/4 * * * *"
+  enabled: true
+```
+
+You need to provide to every `SleepCycle` the `shutdown` (mandatory) and `wakeup` (non-mandatory) policies via Cron expressions.
+`SleepCycle` is a Namespaced Custom Resource, and the controller will monitor all the resources in the Namespace you installed the
+`SleepCycle` manifest and they are marked with a `Label` that has as key `rekuberate.io/sleepcycle:` and as value the `name` of the manifest you created:
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: nginx-demo
+    rekuberate.io/sleepcycle: sleepcycle-sample
+  name: nginx-demo
+  namespace: default
+spec:
+  ...
+  ...
+```
+
 ### Running on the cluster
 1. Install Instances of Custom Resources:
 
@@ -62,13 +93,31 @@ make install
 make run
 ```
 
+<p align="center">
+  <img width="256" height="250" src="https://github.com/rekuberate-io/sleepcycles/blob/main/docs/images/SCR-20221222-hij.png?raw=true">
+</p>
+
 **NOTE:** You can also run this in one step by running: `make install run`
 
 ### Modifying the API definitions
 If you are editing the API definitions, generate the manifests such as CRs or CRDs using:
 
 ```sh
+make generate
 make manifests
+```
+
+then install the CRDs in the cluster with:
+
+```sh
+make install
+```
+
+**NOTE:** You can debug the controller in the IDE of your choice by hooking to the main.go or you can start
+the controller without debugging with:
+
+```sh
+make run
 ```
 
 **NOTE:** Run `make --help` for more information on all potential `make` targets
