@@ -169,7 +169,7 @@ func (r *SleepCycleReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 	nextOperation, requeueAfter := r.getNextScheduledOperation(sleepCycle, &currentOperation)
 
-	r.logger.Info("🔁 Requeue", "next-op", nextOperation.String(), "after", requeueAfter)
+	r.logger.Info("Requeue", "next-op", nextOperation.String(), "after", requeueAfter)
 	return ctrl.Result{RequeueAfter: requeueAfter}, nil
 }
 
@@ -299,7 +299,7 @@ func (r *SleepCycleReconciler) ReconcileDeployments(
 						return ctrl.Result{}, err
 					}
 
-					r.logger.Info("☀️ Scaled Up Deployment", "deployment", deploymentFullName, "targetReplicas", targetReplicas)
+					r.logger.Info("☀️  Scaled Up Deployment", "deployment", deploymentFullName, "targetReplicas", targetReplicas)
 				}
 			}
 		}
@@ -353,7 +353,7 @@ func (r *SleepCycleReconciler) ReconcileCronJobs(ctx context.Context,
 						return ctrl.Result{}, err
 					}
 
-					r.logger.Info("☀️ Enabled Cronjob", "cronJob", cronJobFullName)
+					r.logger.Info("☀️  Enabled Cronjob", "cronJob", cronJobFullName)
 				}
 			}
 		}
@@ -417,7 +417,7 @@ func (r *SleepCycleReconciler) ReconcileStatefulSets(
 						return ctrl.Result{}, err
 					}
 
-					r.logger.Info("☀️ Scaled Up StatefulSet", "statefulSet", statefulSetFullName, "targetReplicas", targetReplicas)
+					r.logger.Info("☀️  Scaled Up StatefulSet", "statefulSet", statefulSetFullName, "targetReplicas", targetReplicas)
 				}
 			}
 		}
@@ -481,7 +481,7 @@ func (r *SleepCycleReconciler) ReconcileHorizontalPodAutoscalers(
 						return ctrl.Result{}, err
 					}
 
-					r.logger.Info("☀️ Scaled Up HorizontalPodAutoscaler", "hpa", hpaFullName, "maxReplicas", targetReplicas)
+					r.logger.Info("☀️  Scaled Up HorizontalPodAutoscaler", "hpa", hpaFullName, "maxReplicas", targetReplicas)
 				}
 			}
 		}
