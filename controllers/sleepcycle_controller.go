@@ -83,6 +83,12 @@ var (
 //+kubebuilder:rbac:groups=core.rekuberate.io,resources=sleepcycles,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=core.rekuberate.io,resources=sleepcycles/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=core.rekuberate.io,resources=sleepcycles/finalizers,verbs=update
+//+kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=apps,resources=replicasets,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=core,resources=replicasets,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=batch,resources=cronjobs,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=apps,resources=statefulsets,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=autoscaling,resources=horizontalpodautoscalers,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -250,6 +256,10 @@ func (r *SleepCycleReconciler) ReconcileDeployments(
 		return ctrl.Result{}, err
 	}
 
+	if len(deploymentList.Items) == 0 {
+		return ctrl.Result{}, nil
+	}
+
 	r.logger.Info("📚 Processing Deployments")
 
 	for _, deployment := range deploymentList.Items {
@@ -269,27 +279,27 @@ func (r *SleepCycleReconciler) ReconcileDeployments(
 			case Watch:
 			case Shutdown:
 				if deployment.Status.Replicas != 0 {
-					r.logger.Info("🌙 Scale Down Deployment", "deployment", deploymentFullName, "targetReplicas", 0)
-
 					err := r.ScaleDeployment(ctx, deployment, 0)
 					if err != nil {
 						r.logger.Error(err, "🛑️ Scaling Deployment failed", "deployment", deploymentFullName)
 						r.recordEvent(*sleepCycle, true, deploymentFullName, op)
 						return ctrl.Result{}, err
 					}
+
+					r.logger.Info("🌙 Scaled Down Deployment", "deployment", deploymentFullName, "targetReplicas", 0)
 				}
 			case WakeUp:
 				targetReplicas := int32(deepCopy.Status.UsedBy[deploymentFullName])
 
 				if deployment.Status.Replicas != targetReplicas {
-					r.logger.Info("☀️ Scale Up Deployment", "deployment", deploymentFullName, "targetReplicas", targetReplicas)
-
 					err := r.ScaleDeployment(ctx, deployment, targetReplicas)
 					if err != nil {
 						r.logger.Error(err, "🛑️ Scaling Deployment failed", "deployment", deploymentFullName)
 						r.recordEvent(*sleepCycle, true, deploymentFullName, op)
 						return ctrl.Result{}, err
 					}
+
+					r.logger.Info("☀️ Scaled Up Deployment", "deployment", deploymentFullName, "targetReplicas", targetReplicas)
 				}
 			}
 		}
@@ -309,6 +319,10 @@ func (r *SleepCycleReconciler) ReconcileCronJobs(ctx context.Context,
 		return ctrl.Result{}, err
 	}
 
+	if len(cronJobList.Items) == 0 {
+		return ctrl.Result{}, nil
+	}
+
 	r.logger.Info("🕑 Processing CronJobs")
 
 	for _, cronJob := range cronJobList.Items {
@@ -321,25 +335,25 @@ func (r *SleepCycleReconciler) ReconcileCronJobs(ctx context.Context,
 			case Watch:
 			case Shutdown:
 				if !*cronJob.Spec.Suspend {
-					r.logger.Info("🌙 Suspending CronJob", "cronJob", cronJobFullName)
-
 					err := r.SuspendCronJob(ctx, cronJob, true)
 					if err != nil {
 						r.logger.Error(err, "🛑️️ Suspending CronJob failed", "cronJob", cronJobFullName)
 						r.recordEvent(*sleepCycle, true, cronJobFullName, op)
 						return ctrl.Result{}, err
 					}
+
+					r.logger.Info("🌙 Suspended CronJob", "cronJob", cronJobFullName)
 				}
 			case WakeUp:
 				if *cronJob.Spec.Suspend {
-					r.logger.Info("☀️ Enabling Cronjob", "cronJob", cronJobFullName)
-
 					err := r.SuspendCronJob(ctx, cronJob, false)
 					if err != nil {
 						r.logger.Error(err, "🛑️️ Suspending CronJob failed", "cronJob", cronJobFullName)
 						r.recordEvent(*sleepCycle, true, cronJobFullName, op)
 						return ctrl.Result{}, err
 					}
+
+					r.logger.Info("☀️ Enabled Cronjob", "cronJob", cronJobFullName)
 				}
 			}
 		}
@@ -358,6 +372,10 @@ func (r *SleepCycleReconciler) ReconcileStatefulSets(
 	statefulSetList := appsv1.StatefulSetList{}
 	if err := r.List(ctx, &statefulSetList, &client.ListOptions{Namespace: req.NamespacedName.Namespace}); err != nil {
 		return ctrl.Result{}, err
+	}
+
+	if len(statefulSetList.Items) == 0 {
+		return ctrl.Result{}, nil
 	}
 
 	r.logger.Info("📦 Processing StatefulSets")
@@ -379,27 +397,27 @@ func (r *SleepCycleReconciler) ReconcileStatefulSets(
 			case Watch:
 			case Shutdown:
 				if statefulSet.Status.Replicas != 0 {
-					r.logger.Info("🌙 Scale Down StatefulSet", "statefulSet", statefulSetFullName, "targetReplicas", 0)
-
 					err := r.ScaleStatefulSet(ctx, statefulSet, 0)
 					if err != nil {
 						r.logger.Error(err, "🛑️ Scaling StatefulSet failed", "statefulSet", statefulSetFullName)
 						r.recordEvent(*sleepCycle, true, statefulSetFullName, op)
 						return ctrl.Result{}, err
 					}
+
+					r.logger.Info("🌙 Scaled Down StatefulSet", "statefulSet", statefulSetFullName, "targetReplicas", 0)
 				}
 			case WakeUp:
 				targetReplicas := int32(deepCopy.Status.UsedBy[statefulSetFullName])
 
 				if statefulSet.Status.Replicas != targetReplicas {
-					r.logger.Info("☀️ Scale Up StatefulSet", "statefulSet", statefulSetFullName, "targetReplicas", targetReplicas)
-
 					err := r.ScaleStatefulSet(ctx, statefulSet, targetReplicas)
 					if err != nil {
 						r.logger.Error(err, "🛑️ Scaling StatefulSet failed", "statefulSet", statefulSetFullName)
 						r.recordEvent(*sleepCycle, true, statefulSetFullName, op)
 						return ctrl.Result{}, err
 					}
+
+					r.logger.Info("☀️ Scaled Up StatefulSet", "statefulSet", statefulSetFullName, "targetReplicas", targetReplicas)
 				}
 			}
 		}
@@ -418,6 +436,10 @@ func (r *SleepCycleReconciler) ReconcileHorizontalPodAutoscalers(
 	hpaList := autoscalingv1.HorizontalPodAutoscalerList{}
 	if err := r.List(ctx, &hpaList, &client.ListOptions{Namespace: req.NamespacedName.Namespace}); err != nil {
 		return ctrl.Result{}, err
+	}
+
+	if len(hpaList.Items) == 0 {
+		return ctrl.Result{}, nil
 	}
 
 	r.logger.Info("📈 Processing HorizontalPodAutoscalers")
@@ -439,27 +461,27 @@ func (r *SleepCycleReconciler) ReconcileHorizontalPodAutoscalers(
 			case Watch:
 			case Shutdown:
 				if hpa.Spec.MaxReplicas != 1 {
-					r.logger.Info("🌙 Scale Down HorizontalPodAutoscaler", "hpa", hpaFullName, "maxReplicas", 1)
-
 					err := r.ScaleHorizontalPodAutoscaler(ctx, hpa, 1)
 					if err != nil {
 						r.logger.Error(err, "🛑️ Scaling HorizontalPodAutoscaler failed", "hpa", hpaFullName)
 						r.recordEvent(*sleepCycle, true, hpaFullName, op)
 						return ctrl.Result{}, err
 					}
+
+					r.logger.Info("🌙 Scaled Down HorizontalPodAutoscaler", "hpa", hpaFullName, "maxReplicas", 1)
 				}
 			case WakeUp:
 				targetReplicas := int32(deepCopy.Status.UsedBy[hpaFullName])
 
 				if hpa.Spec.MaxReplicas != targetReplicas {
-					r.logger.Info("☀️ Scale Up HorizontalPodAutoscaler", "hpa", hpaFullName, "maxReplicas", targetReplicas)
-
 					err := r.ScaleHorizontalPodAutoscaler(ctx, hpa, targetReplicas)
 					if err != nil {
 						r.logger.Error(err, "🛑️ Scaling HorizontalPodAutoscaler failed", "hpa", hpaFullName)
 						r.recordEvent(*sleepCycle, true, hpaFullName, op)
 						return ctrl.Result{}, err
 					}
+
+					r.logger.Info("☀️ Scaled Up HorizontalPodAutoscaler", "hpa", hpaFullName, "maxReplicas", targetReplicas)
 				}
 			}
 		}
