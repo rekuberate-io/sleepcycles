@@ -18,12 +18,14 @@ kind: SleepCycle
 metadata:
   name: sleepcycle-sample
 spec:
-  shutdown: "*/3 * * * *"
-  wakeup: "*/4 * * * *"
+  shutdown: "0 20 * * *"
+  wakeup: "30 7 * * 1-5"
   enabled: true
 ```
 
-You need to provide to every `SleepCycle` the `shutdown` (mandatory) and `wakeup` (non-mandatory) policies via Cron expressions.
+You need to provide to every `SleepCycle` the `shutdown` (mandatory) and `wakeup` (non-mandatory) policies via Cron expressions (**do not include seconds**). 
+The example above will set a `SleepCycle` schedule shutting down your workloads **every day at 20:00** and waking them up **every weekday at 07:30**.
+
 `SleepCycle` is a Namespaced Custom Resource, and the controller will monitor all the resources in the Namespace you installed the
 `SleepCycle` manifest and they are marked with a `Label` that has as key `rekuberate.io/sleepcycle:` and as value the `name` of the manifest you created:
 
