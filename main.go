@@ -90,8 +90,9 @@ func main() {
 	}
 
 	if err = (&controllers.SleepCycleReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:   mgr.GetClient(),
+		Scheme:   mgr.GetScheme(),
+		Recorder: mgr.GetEventRecorderFor("rekuberate-io/sleepcycles"),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "SleepCycle")
 		os.Exit(1)

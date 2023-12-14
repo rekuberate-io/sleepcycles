@@ -3,6 +3,6 @@ kind: SleepCycle
 metadata:
   name: sleepcycle-sample
 spec:
-  shutdown: "*/3 * * * *"
-  wakeup: "*/4 * * * *"
+  shutdown: "*/1 * * * *"
+  wakeup: "*/2 * * * *"
   enabled: true
