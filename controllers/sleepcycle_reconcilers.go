@@ -14,8 +14,8 @@ import (
 func (r *SleepCycleReconciler) ReconcileDeployments(
 	ctx context.Context,
 	req ctrl.Request,
-	sleepCycle *corev1alpha1.SleepCycle,
-	deepCopy *corev1alpha1.SleepCycle,
+	original *corev1alpha1.SleepCycle,
+	desired *corev1alpha1.SleepCycle,
 	op SleepCycleOperation,
 ) (ctrl.Result, error) {
 	deploymentList := appsv1.DeploymentList{}
@@ -30,16 +30,16 @@ func (r *SleepCycleReconciler) ReconcileDeployments(
 	r.logger.Info("📚 Processing Deployments")
 
 	for _, deployment := range deploymentList.Items {
-		hasSleepCycle := r.isTagged(&deployment.ObjectMeta, sleepCycle.Name)
+		hasSleepCycle := r.isTagged(&deployment.ObjectMeta, original.Name)
 
 		if hasSleepCycle {
 			deploymentFullName := fmt.Sprintf("%v/%v", deployment.Namespace, deployment.Name)
-			deepCopy.Status.Enabled = sleepCycle.Spec.Enabled
+			desired.Status.Enabled = original.Spec.Enabled
 
 			currentReplicas := int(deployment.Status.Replicas)
-			val, ok := deepCopy.Status.UsedBy[deploymentFullName]
+			val, ok := desired.Status.UsedBy[deploymentFullName]
 			if !ok || (ok && val < currentReplicas && currentReplicas > 0) {
-				deepCopy.Status.UsedBy[deploymentFullName] = currentReplicas
+				desired.Status.UsedBy[deploymentFullName] = currentReplicas
 			}
 
 			switch op {
@@ -49,23 +49,25 @@ func (r *SleepCycleReconciler) ReconcileDeployments(
 					err := r.ScaleDeployment(ctx, deployment, 0)
 					if err != nil {
 						r.logger.Error(err, "🛑️ Scaling Deployment failed", "deployment", deploymentFullName)
-						r.RecordEvent(*sleepCycle, true, deploymentFullName, op)
+						r.RecordEvent(*original, true, deploymentFullName, op, []string{err.Error()}...)
 						return ctrl.Result{}, err
 					}
 
+					r.RecordEvent(*original, false, deploymentFullName, op, []string{fmt.Sprintf("Scaled from %d to %d replicas", currentReplicas, 0)}...)
 					r.logger.Info("🌙 Scaled Down Deployment", "deployment", deploymentFullName, "targetReplicas", 0)
 				}
 			case WakeUp:
-				targetReplicas := int32(deepCopy.Status.UsedBy[deploymentFullName])
+				targetReplicas := int32(desired.Status.UsedBy[deploymentFullName])
 
 				if deployment.Status.Replicas != targetReplicas {
 					err := r.ScaleDeployment(ctx, deployment, targetReplicas)
 					if err != nil {
 						r.logger.Error(err, "🛑️ Scaling Deployment failed", "deployment", deploymentFullName)
-						r.RecordEvent(*sleepCycle, true, deploymentFullName, op)
+						r.RecordEvent(*original, true, deploymentFullName, op, []string{err.Error()}...)
 						return ctrl.Result{}, err
 					}
 
+					r.RecordEvent(*original, false, deploymentFullName, op, []string{fmt.Sprintf("Scaled from %d to %d replicas", currentReplicas, targetReplicas)}...)
 					r.logger.Info("☀️  Scaled Up Deployment", "deployment", deploymentFullName, "targetReplicas", targetReplicas)
 				}
 			}
@@ -77,8 +79,8 @@ func (r *SleepCycleReconciler) ReconcileDeployments(
 
 func (r *SleepCycleReconciler) ReconcileCronJobs(ctx context.Context,
 	req ctrl.Request,
-	sleepCycle *corev1alpha1.SleepCycle,
-	deepCopy *corev1alpha1.SleepCycle,
+	original *corev1alpha1.SleepCycle,
+	desired *corev1alpha1.SleepCycle,
 	op SleepCycleOperation,
 ) (ctrl.Result, error) {
 	cronJobList := batchv1.CronJobList{}
@@ -93,7 +95,7 @@ func (r *SleepCycleReconciler) ReconcileCronJobs(ctx context.Context,
 	r.logger.Info("🕑 Processing CronJobs")
 
 	for _, cronJob := range cronJobList.Items {
-		hasSleepCycle := r.isTagged(&cronJob.ObjectMeta, sleepCycle.Name)
+		hasSleepCycle := r.isTagged(&cronJob.ObjectMeta, original.Name)
 
 		if hasSleepCycle {
 			cronJobFullName := fmt.Sprintf("%v/%v", cronJob.Namespace, cronJob.Name)
@@ -105,7 +107,7 @@ func (r *SleepCycleReconciler) ReconcileCronJobs(ctx context.Context,
 					err := r.SuspendCronJob(ctx, cronJob, true)
 					if err != nil {
 						r.logger.Error(err, "🛑️️ Suspending CronJob failed", "cronJob", cronJobFullName)
-						r.RecordEvent(*sleepCycle, true, cronJobFullName, op)
+						r.RecordEvent(*original, true, cronJobFullName, op, []string{err.Error()}...)
 						return ctrl.Result{}, err
 					}
 
@@ -116,7 +118,7 @@ func (r *SleepCycleReconciler) ReconcileCronJobs(ctx context.Context,
 					err := r.SuspendCronJob(ctx, cronJob, false)
 					if err != nil {
 						r.logger.Error(err, "🛑️️ Suspending CronJob failed", "cronJob", cronJobFullName)
-						r.RecordEvent(*sleepCycle, true, cronJobFullName, op)
+						r.RecordEvent(*original, true, cronJobFullName, op, []string{err.Error()}...)
 						return ctrl.Result{}, err
 					}
 
@@ -132,8 +134,8 @@ func (r *SleepCycleReconciler) ReconcileCronJobs(ctx context.Context,
 func (r *SleepCycleReconciler) ReconcileStatefulSets(
 	ctx context.Context,
 	req ctrl.Request,
-	sleepCycle *corev1alpha1.SleepCycle,
-	deepCopy *corev1alpha1.SleepCycle,
+	original *corev1alpha1.SleepCycle,
+	desired *corev1alpha1.SleepCycle,
 	op SleepCycleOperation,
 ) (ctrl.Result, error) {
 	statefulSetList := appsv1.StatefulSetList{}
@@ -148,16 +150,16 @@ func (r *SleepCycleReconciler) ReconcileStatefulSets(
 	r.logger.Info("📦 Processing StatefulSets")
 
 	for _, statefulSet := range statefulSetList.Items {
-		hasSleepCycle := r.isTagged(&statefulSet.ObjectMeta, sleepCycle.Name)
+		hasSleepCycle := r.isTagged(&statefulSet.ObjectMeta, original.Name)
 
 		if hasSleepCycle {
 			statefulSetFullName := fmt.Sprintf("%v/%v", statefulSet.Namespace, statefulSet.Name)
-			deepCopy.Status.Enabled = sleepCycle.Spec.Enabled
+			desired.Status.Enabled = original.Spec.Enabled
 
 			currentReplicas := int(statefulSet.Status.Replicas)
-			val, ok := deepCopy.Status.UsedBy[statefulSetFullName]
+			val, ok := desired.Status.UsedBy[statefulSetFullName]
 			if !ok || (ok && val < currentReplicas && currentReplicas > 0) {
-				deepCopy.Status.UsedBy[statefulSetFullName] = currentReplicas
+				desired.Status.UsedBy[statefulSetFullName] = currentReplicas
 			}
 
 			switch op {
@@ -167,23 +169,25 @@ func (r *SleepCycleReconciler) ReconcileStatefulSets(
 					err := r.ScaleStatefulSet(ctx, statefulSet, 0)
 					if err != nil {
 						r.logger.Error(err, "🛑️ Scaling StatefulSet failed", "statefulSet", statefulSetFullName)
-						r.RecordEvent(*sleepCycle, true, statefulSetFullName, op)
+						r.RecordEvent(*original, true, statefulSetFullName, op, []string{err.Error()}...)
 						return ctrl.Result{}, err
 					}
 
+					r.RecordEvent(*original, false, statefulSetFullName, op, []string{fmt.Sprintf("Scaled from %d to %d replicas", currentReplicas, 0)}...)
 					r.logger.Info("🌙 Scaled Down StatefulSet", "statefulSet", statefulSetFullName, "targetReplicas", 0)
 				}
 			case WakeUp:
-				targetReplicas := int32(deepCopy.Status.UsedBy[statefulSetFullName])
+				targetReplicas := int32(desired.Status.UsedBy[statefulSetFullName])
 
 				if statefulSet.Status.Replicas != targetReplicas {
 					err := r.ScaleStatefulSet(ctx, statefulSet, targetReplicas)
 					if err != nil {
 						r.logger.Error(err, "🛑️ Scaling StatefulSet failed", "statefulSet", statefulSetFullName)
-						r.RecordEvent(*sleepCycle, true, statefulSetFullName, op)
+						r.RecordEvent(*original, true, statefulSetFullName, op, []string{err.Error()}...)
 						return ctrl.Result{}, err
 					}
 
+					r.RecordEvent(*original, false, statefulSetFullName, op, []string{fmt.Sprintf("Scaled from %d to %d replicas", currentReplicas, targetReplicas)}...)
 					r.logger.Info("☀️  Scaled Up StatefulSet", "statefulSet", statefulSetFullName, "targetReplicas", targetReplicas)
 				}
 			}
@@ -196,8 +200,8 @@ func (r *SleepCycleReconciler) ReconcileStatefulSets(
 func (r *SleepCycleReconciler) ReconcileHorizontalPodAutoscalers(
 	ctx context.Context,
 	req ctrl.Request,
-	sleepCycle *corev1alpha1.SleepCycle,
-	deepCopy *corev1alpha1.SleepCycle,
+	original *corev1alpha1.SleepCycle,
+	desired *corev1alpha1.SleepCycle,
 	op SleepCycleOperation,
 ) (ctrl.Result, error) {
 	hpaList := autoscalingv1.HorizontalPodAutoscalerList{}
@@ -212,16 +216,16 @@ func (r *SleepCycleReconciler) ReconcileHorizontalPodAutoscalers(
 	r.logger.Info("📈 Processing HorizontalPodAutoscalers")
 
 	for _, hpa := range hpaList.Items {
-		hasSleepCycle := r.isTagged(&hpa.ObjectMeta, sleepCycle.Name)
+		hasSleepCycle := r.isTagged(&hpa.ObjectMeta, original.Name)
 
 		if hasSleepCycle {
 			hpaFullName := fmt.Sprintf("%v/%v", hpa.Namespace, hpa.Name)
-			deepCopy.Status.Enabled = sleepCycle.Spec.Enabled
+			desired.Status.Enabled = original.Spec.Enabled
 
 			maxReplicas := int(hpa.Spec.MaxReplicas)
-			val, ok := deepCopy.Status.UsedBy[hpaFullName]
+			val, ok := desired.Status.UsedBy[hpaFullName]
 			if !ok || (ok && val < maxReplicas && maxReplicas > 0) {
-				deepCopy.Status.UsedBy[hpaFullName] = maxReplicas
+				desired.Status.UsedBy[hpaFullName] = maxReplicas
 			}
 
 			switch op {
@@ -231,23 +235,25 @@ func (r *SleepCycleReconciler) ReconcileHorizontalPodAutoscalers(
 					err := r.ScaleHorizontalPodAutoscaler(ctx, hpa, 1)
 					if err != nil {
 						r.logger.Error(err, "🛑️ Scaling HorizontalPodAutoscaler failed", "hpa", hpaFullName)
-						r.RecordEvent(*sleepCycle, true, hpaFullName, op)
+						r.RecordEvent(*original, true, hpaFullName, op, []string{err.Error()}...)
 						return ctrl.Result{}, err
 					}
 
+					r.RecordEvent(*original, false, hpaFullName, op, []string{fmt.Sprintf("Scaled from %d to %d max replicas", maxReplicas, 1)}...)
 					r.logger.Info("🌙 Scaled Down HorizontalPodAutoscaler", "hpa", hpaFullName, "maxReplicas", 1)
 				}
 			case WakeUp:
-				targetReplicas := int32(deepCopy.Status.UsedBy[hpaFullName])
+				targetReplicas := int32(desired.Status.UsedBy[hpaFullName])
 
 				if hpa.Spec.MaxReplicas != targetReplicas {
 					err := r.ScaleHorizontalPodAutoscaler(ctx, hpa, targetReplicas)
 					if err != nil {
 						r.logger.Error(err, "🛑️ Scaling HorizontalPodAutoscaler failed", "hpa", hpaFullName)
-						r.RecordEvent(*sleepCycle, true, hpaFullName, op)
+						r.RecordEvent(*original, true, hpaFullName, op, []string{err.Error()}...)
 						return ctrl.Result{}, err
 					}
 
+					r.RecordEvent(*original, false, hpaFullName, op, []string{fmt.Sprintf("Scaled from %d to %d max replicas", maxReplicas, targetReplicas)}...)
 					r.logger.Info("☀️  Scaled Up HorizontalPodAutoscaler", "hpa", hpaFullName, "maxReplicas", targetReplicas)
 				}
 			}

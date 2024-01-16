@@ -57,8 +57,8 @@ type SleepCycleReconciler struct {
 type runtimeObjectReconciler func(
 	ctx context.Context,
 	req ctrl.Request,
-	sleepCycle *corev1alpha1.SleepCycle,
-	deepCopy *corev1alpha1.SleepCycle,
+	original *corev1alpha1.SleepCycle,
+	desired *corev1alpha1.SleepCycle,
 	op SleepCycleOperation,
 ) (ctrl.Result, error)
 
@@ -101,8 +101,8 @@ var (
 func (r *SleepCycleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	r.logger = log.Log.WithValues("namespace", req.Namespace, "sleepcycle", req.Name)
 
-	var sleepCycle corev1alpha1.SleepCycle
-	if err := r.Get(ctx, req.NamespacedName, &sleepCycle); err != nil {
+	var original corev1alpha1.SleepCycle
+	if err := r.Get(ctx, req.NamespacedName, &original); err != nil {
 		if apierrors.IsNotFound(err) {
 			r.logger.Error(err, "🛑️ unable to find SleepCycle")
 			return ctrl.Result{}, nil
@@ -112,17 +112,18 @@ func (r *SleepCycleReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, err
 	}
 
-	if !sleepCycle.Spec.Enabled {
+	if !original.Spec.Enabled {
 		return ctrl.Result{}, nil
 	}
 
-	currentOperation := r.getCurrentScheduledOperation(sleepCycle)
-	sleepCycleFullName := fmt.Sprintf("%v/%v", sleepCycle.Namespace, sleepCycle.Name)
+	currentOperation := r.getCurrentScheduledOperation(original)
+	sleepCycleFullName := fmt.Sprintf("%v/%v", original.Namespace, original.Name)
 
-	deepCopy := *sleepCycle.DeepCopy()
-	if deepCopy.Status.UsedBy == nil {
+	desired := *original.DeepCopy()
+	desired.Status.LastRunOperation = currentOperation.String()
+	if desired.Status.UsedBy == nil {
 		usedBy := make(map[string]int)
-		deepCopy.Status.UsedBy = usedBy
+		desired.Status.UsedBy = usedBy
 	}
 
 	r.logger = r.logger.WithValues("op", currentOperation.String())
@@ -131,17 +132,16 @@ func (r *SleepCycleReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		reconcilers := []runtimeObjectReconciler{r.ReconcileDeployments, r.ReconcileCronJobs, r.ReconcileStatefulSets, r.ReconcileHorizontalPodAutoscalers}
 
 		for _, reconciler := range reconcilers {
-			result, err := reconciler(ctx, req, &sleepCycle, &deepCopy, currentOperation)
+			result, err := reconciler(ctx, req, &original, &desired, currentOperation)
 			if err != nil {
 				if currentOperation != Watch {
-					deepCopy.Status.LastRunOperation = currentOperation.String()
-					deepCopy.Status.LastRunTime = &metav1.Time{Time: time.Now()}
-					deepCopy.Status.LastRunWasSuccessful = false
+					desired.Status.LastRunTime = &metav1.Time{Time: time.Now()}
+					desired.Status.LastRunWasSuccessful = false
 				}
 
-				if err := r.Status().Update(ctx, &deepCopy); err != nil {
+				if err := r.Status().Update(ctx, &desired); err != nil {
 					r.logger.Error(err, fmt.Sprintf("🛑️ %s", SleepCycleStatusUpdateFailure), "sleepcycle", sleepCycleFullName)
-					r.Recorder.Event(&sleepCycle, corev1.EventTypeWarning, "SleepCycleStatus", strings.ToLower(SleepCycleStatusUpdateFailure))
+					r.Recorder.Event(&original, corev1.EventTypeWarning, "SleepCycleStatus", strings.ToLower(SleepCycleStatusUpdateFailure))
 					return ctrl.Result{}, err
 				}
 
@@ -149,30 +149,29 @@ func (r *SleepCycleReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			}
 		}
 
-		deepCopy.Status.LastRunOperation = currentOperation.String()
-		deepCopy.Status.LastRunTime = &metav1.Time{Time: time.Now()}
-		deepCopy.Status.LastRunWasSuccessful = true
+		desired.Status.LastRunTime = &metav1.Time{Time: time.Now()}
+		desired.Status.LastRunWasSuccessful = true
 	}
 
-	nextScheduledShutdown, nextScheduledWakeup := r.getSchedulesTime(sleepCycle, false)
+	nextScheduledShutdown, nextScheduledWakeup := r.getSchedulesTime(original, false)
 	if nextScheduledWakeup != nil {
-		tz := r.getTimeZone(sleepCycle.Spec.WakeupTimeZone)
+		tz := r.getTimeZone(original.Spec.WakeupTimeZone)
 		t := nextScheduledWakeup.In(tz)
-		deepCopy.Status.NextScheduledWakeupTime = &metav1.Time{Time: t}
+		desired.Status.NextScheduledWakeupTime = &metav1.Time{Time: t}
 	} else {
-		deepCopy.Status.NextScheduledWakeupTime = nil
+		desired.Status.NextScheduledWakeupTime = nil
 	}
-	tz := r.getTimeZone(sleepCycle.Spec.ShutdownTimeZone)
+	tz := r.getTimeZone(original.Spec.ShutdownTimeZone)
 	t := nextScheduledShutdown.In(tz)
-	deepCopy.Status.NextScheduledShutdownTime = &metav1.Time{Time: t}
+	desired.Status.NextScheduledShutdownTime = &metav1.Time{Time: t}
 
-	if err := r.Status().Update(ctx, &deepCopy); err != nil {
+	if err := r.Status().Update(ctx, &desired); err != nil {
 		r.logger.Error(err, fmt.Sprintf("🛑️ %s", SleepCycleStatusUpdateFailure), "sleepcycle", sleepCycleFullName)
-		r.Recorder.Event(&sleepCycle, corev1.EventTypeWarning, "SleepCycleStatus", strings.ToLower(SleepCycleStatusUpdateFailure))
+		r.Recorder.Event(&original, corev1.EventTypeWarning, "SleepCycleStatus", strings.ToLower(SleepCycleStatusUpdateFailure))
 		return ctrl.Result{}, err
 	}
 
-	nextOperation, requeueAfter := r.getNextScheduledOperation(sleepCycle, &currentOperation)
+	nextOperation, requeueAfter := r.getNextScheduledOperation(original, &currentOperation)
 
 	r.logger.Info("Requeue", "next-op", nextOperation.String(), "after", requeueAfter)
 	return ctrl.Result{RequeueAfter: requeueAfter}, nil
@@ -249,7 +248,7 @@ func (r *SleepCycleReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-func (r *SleepCycleReconciler) RecordEvent(sleepCycle corev1alpha1.SleepCycle, isError bool, namespacedName string, operation SleepCycleOperation) {
+func (r *SleepCycleReconciler) RecordEvent(sleepCycle corev1alpha1.SleepCycle, isError bool, namespacedName string, operation SleepCycleOperation, extra ...string) {
 	eventType := corev1.EventTypeNormal
 	reason := "SleepCycleOpSuccess"
 	message := fmt.Sprintf("%s on %s succeeded", operation.String(), namespacedName)
@@ -258,6 +257,10 @@ func (r *SleepCycleReconciler) RecordEvent(sleepCycle corev1alpha1.SleepCycle, i
 		eventType = corev1.EventTypeWarning
 		reason = "SleepCycleOpFailure"
 		message = fmt.Sprintf("%s on %s failed", operation.String(), namespacedName)
+	}
+
+	for _, s := range extra {
+		message = message + ". " + s
 	}
 
 	r.Recorder.Event(&sleepCycle, eventType, reason, strings.ToLower(message))
