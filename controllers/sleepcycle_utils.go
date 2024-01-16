@@ -146,7 +146,7 @@ func (r *SleepCycleReconciler) getTimeZone(timezone *string) *time.Location {
 	return tz
 }
 
-func (r *SleepCycleReconciler) isTagged(obj *metav1.ObjectMeta, tag string) bool {
+func (r *SleepCycleReconciler) isAnnotated(obj *metav1.ObjectMeta, tag string) bool {
 	val, ok := obj.GetLabels()[SleepCycleLabel]
 
 	if ok && val == tag {

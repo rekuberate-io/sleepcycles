@@ -30,7 +30,7 @@ func (r *SleepCycleReconciler) ReconcileDeployments(
 	r.logger.Info("📚 Processing Deployments")
 
 	for _, deployment := range deploymentList.Items {
-		hasSleepCycle := r.isTagged(&deployment.ObjectMeta, original.Name)
+		hasSleepCycle := r.isAnnotated(&deployment.ObjectMeta, original.Name)
 
 		if hasSleepCycle {
 			deploymentFullName := fmt.Sprintf("%v/%v", deployment.Namespace, deployment.Name)
@@ -95,7 +95,7 @@ func (r *SleepCycleReconciler) ReconcileCronJobs(ctx context.Context,
 	r.logger.Info("🕑 Processing CronJobs")
 
 	for _, cronJob := range cronJobList.Items {
-		hasSleepCycle := r.isTagged(&cronJob.ObjectMeta, original.Name)
+		hasSleepCycle := r.isAnnotated(&cronJob.ObjectMeta, original.Name)
 
 		if hasSleepCycle {
 			cronJobFullName := fmt.Sprintf("%v/%v", cronJob.Namespace, cronJob.Name)
@@ -150,7 +150,7 @@ func (r *SleepCycleReconciler) ReconcileStatefulSets(
 	r.logger.Info("📦 Processing StatefulSets")
 
 	for _, statefulSet := range statefulSetList.Items {
-		hasSleepCycle := r.isTagged(&statefulSet.ObjectMeta, original.Name)
+		hasSleepCycle := r.isAnnotated(&statefulSet.ObjectMeta, original.Name)
 
 		if hasSleepCycle {
 			statefulSetFullName := fmt.Sprintf("%v/%v", statefulSet.Namespace, statefulSet.Name)
@@ -216,7 +216,7 @@ func (r *SleepCycleReconciler) ReconcileHorizontalPodAutoscalers(
 	r.logger.Info("📈 Processing HorizontalPodAutoscalers")
 
 	for _, hpa := range hpaList.Items {
-		hasSleepCycle := r.isTagged(&hpa.ObjectMeta, original.Name)
+		hasSleepCycle := r.isAnnotated(&hpa.ObjectMeta, original.Name)
 
 		if hasSleepCycle {
 			hpaFullName := fmt.Sprintf("%v/%v", hpa.Namespace, hpa.Name)

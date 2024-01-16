@@ -112,6 +112,8 @@ func (r *SleepCycleReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, err
 	}
 
+	//TODO: Add finalizer logic
+
 	if !original.Spec.Enabled {
 		return ctrl.Result{}, nil
 	}
