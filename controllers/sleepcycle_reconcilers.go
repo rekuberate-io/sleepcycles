@@ -11,6 +11,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+const (
+	UsedByLabelKey = "(%v) %v/%v"
+)
+
 func (r *SleepCycleReconciler) ReconcileDeployments(
 	ctx context.Context,
 	req ctrl.Request,
@@ -24,16 +28,17 @@ func (r *SleepCycleReconciler) ReconcileDeployments(
 	}
 
 	if len(deploymentList.Items) == 0 {
+		r.refreshLabelsDeployments(original, desired, deploymentList)
 		return ctrl.Result{}, nil
 	}
 
 	r.logger.Info("📚 Processing Deployments")
 
 	for _, deployment := range deploymentList.Items {
-		hasSleepCycle := r.isAnnotated(&deployment.ObjectMeta, original.Name)
+		hasSleepCycle := r.hasLabel(&deployment.ObjectMeta, original.Name)
 
 		if hasSleepCycle {
-			deploymentFullName := fmt.Sprintf("%v/%v", deployment.Namespace, deployment.Name)
+			deploymentFullName := fmt.Sprintf(UsedByLabelKey, deployment.Kind, deployment.Namespace, deployment.Name)
 			desired.Status.Enabled = original.Spec.Enabled
 
 			currentReplicas := int(deployment.Status.Replicas)
@@ -74,6 +79,7 @@ func (r *SleepCycleReconciler) ReconcileDeployments(
 		}
 	}
 
+	r.refreshLabelsDeployments(original, desired, deploymentList)
 	return ctrl.Result{}, nil
 }
 
@@ -95,10 +101,10 @@ func (r *SleepCycleReconciler) ReconcileCronJobs(ctx context.Context,
 	r.logger.Info("🕑 Processing CronJobs")
 
 	for _, cronJob := range cronJobList.Items {
-		hasSleepCycle := r.isAnnotated(&cronJob.ObjectMeta, original.Name)
+		hasSleepCycle := r.hasLabel(&cronJob.ObjectMeta, original.Name)
 
 		if hasSleepCycle {
-			cronJobFullName := fmt.Sprintf("%v/%v", cronJob.Namespace, cronJob.Name)
+			cronJobFullName := fmt.Sprintf(UsedByLabelKey, cronJob.Kind, cronJob.Namespace, cronJob.Name)
 
 			switch op {
 			case Watch:
@@ -144,16 +150,17 @@ func (r *SleepCycleReconciler) ReconcileStatefulSets(
 	}
 
 	if len(statefulSetList.Items) == 0 {
+		r.refreshLabelsStatefulSets(original, desired, statefulSetList)
 		return ctrl.Result{}, nil
 	}
 
 	r.logger.Info("📦 Processing StatefulSets")
 
 	for _, statefulSet := range statefulSetList.Items {
-		hasSleepCycle := r.isAnnotated(&statefulSet.ObjectMeta, original.Name)
+		hasSleepCycle := r.hasLabel(&statefulSet.ObjectMeta, original.Name)
 
 		if hasSleepCycle {
-			statefulSetFullName := fmt.Sprintf("%v/%v", statefulSet.Namespace, statefulSet.Name)
+			statefulSetFullName := fmt.Sprintf(UsedByLabelKey, statefulSet.Kind, statefulSet.Namespace, statefulSet.Name)
 			desired.Status.Enabled = original.Spec.Enabled
 
 			currentReplicas := int(statefulSet.Status.Replicas)
@@ -194,6 +201,7 @@ func (r *SleepCycleReconciler) ReconcileStatefulSets(
 		}
 	}
 
+	r.refreshLabelsStatefulSets(original, desired, statefulSetList)
 	return ctrl.Result{}, nil
 }
 
@@ -210,16 +218,17 @@ func (r *SleepCycleReconciler) ReconcileHorizontalPodAutoscalers(
 	}
 
 	if len(hpaList.Items) == 0 {
+		r.refreshLabelsHorizontalPodAutoscalers(original, desired, hpaList)
 		return ctrl.Result{}, nil
 	}
 
 	r.logger.Info("📈 Processing HorizontalPodAutoscalers")
 
 	for _, hpa := range hpaList.Items {
-		hasSleepCycle := r.isAnnotated(&hpa.ObjectMeta, original.Name)
+		hasSleepCycle := r.hasLabel(&hpa.ObjectMeta, original.Name)
 
 		if hasSleepCycle {
-			hpaFullName := fmt.Sprintf("%v/%v", hpa.Namespace, hpa.Name)
+			hpaFullName := fmt.Sprintf(UsedByLabelKey, hpa.Kind, hpa.Namespace, hpa.Name)
 			desired.Status.Enabled = original.Spec.Enabled
 
 			maxReplicas := int(hpa.Spec.MaxReplicas)
@@ -260,5 +269,6 @@ func (r *SleepCycleReconciler) ReconcileHorizontalPodAutoscalers(
 		}
 	}
 
+	r.refreshLabelsHorizontalPodAutoscalers(original, desired, hpaList)
 	return ctrl.Result{}, nil
 }

@@ -24,6 +24,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"strings"
 	"time"
 
@@ -42,8 +43,10 @@ import (
 
 const (
 	SleepCycleLabel                      = "rekuberate.io/sleepcycle"
+	SleepCycleFinalizer                  = "sleepcycle.core.rekuberate.io/finalizer"
 	TimeWindowToleranceInSeconds  int    = 30
 	SleepCycleStatusUpdateFailure string = "failed to update SleepCycle Status"
+	SleepCycleFinalizerFailure    string = "finalizer failed"
 )
 
 // SleepCycleReconciler reconciles a SleepCycle object
@@ -60,6 +63,12 @@ type runtimeObjectReconciler func(
 	original *corev1alpha1.SleepCycle,
 	desired *corev1alpha1.SleepCycle,
 	op SleepCycleOperation,
+) (ctrl.Result, error)
+
+type runtimeObjectFinalizer func(
+	ctx context.Context,
+	req ctrl.Request,
+	original *corev1alpha1.SleepCycle,
 ) (ctrl.Result, error)
 
 var (
@@ -104,7 +113,7 @@ func (r *SleepCycleReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	var original corev1alpha1.SleepCycle
 	if err := r.Get(ctx, req.NamespacedName, &original); err != nil {
 		if apierrors.IsNotFound(err) {
-			r.logger.Error(err, "🛑️ unable to find SleepCycle")
+			//r.logger.Error(err, "🛑️ unable to find SleepCycle")
 			return ctrl.Result{}, nil
 		}
 
@@ -112,14 +121,58 @@ func (r *SleepCycleReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, err
 	}
 
+	sleepCycleFullName := fmt.Sprintf("%v/%v", original.Namespace, original.Name)
+
 	//TODO: Add finalizer logic
+
+	if original.ObjectMeta.DeletionTimestamp.IsZero() {
+		// The object is not being deleted, so if it does not have our finalizer,
+		// then lets add the finalizer and update the object.
+		if !containsString(original.ObjectMeta.Finalizers, SleepCycleFinalizer) {
+			original.ObjectMeta.Finalizers = append(original.ObjectMeta.Finalizers, SleepCycleFinalizer)
+			if err := r.Update(ctx, &original); err != nil {
+				r.logger.Error(err, fmt.Sprintf("🛑️ %s", SleepCycleStatusUpdateFailure), "sleepcycle", sleepCycleFullName)
+				r.Recorder.Event(&original, corev1.EventTypeWarning, "SleepCycleStatus", strings.ToLower(SleepCycleStatusUpdateFailure))
+				return ctrl.Result{}, err
+			}
+		}
+	} else {
+		// The object is being deleted
+		if containsString(original.ObjectMeta.Finalizers, SleepCycleFinalizer) {
+			// our finalizer is present, so lets handle our external dependency
+			finalizers := []runtimeObjectFinalizer{r.FinalizeDeployments, r.FinalizeCronJobs, r.FinalizeStatefulSets, r.FinalizeHorizontalPodAutoscalers}
+			for _, finalizer := range finalizers {
+				result, err := finalizer(ctx, req, &original)
+				if err != nil {
+					r.logger.Error(err, fmt.Sprintf("🛑️ %s", SleepCycleFinalizerFailure), "sleepcycle", sleepCycleFullName)
+					r.Recorder.Event(&original, corev1.EventTypeWarning, "SleepCycleFinalizerFailure", fmt.Sprintf(
+						"%s: %s",
+						SleepCycleFinalizerFailure,
+						err.Error(),
+					))
+
+					return result, err
+				}
+			}
+
+			// remove our finalizer from the list and update it.
+			original.ObjectMeta.Finalizers = removeString(original.ObjectMeta.Finalizers, SleepCycleFinalizer)
+			if err := r.Update(ctx, &original); err != nil {
+				r.logger.Error(err, fmt.Sprintf("🛑️ %s", SleepCycleStatusUpdateFailure), "sleepcycle", sleepCycleFullName)
+				r.Recorder.Event(&original, corev1.EventTypeWarning, "SleepCycleStatus", strings.ToLower(SleepCycleStatusUpdateFailure))
+				return ctrl.Result{}, err
+			}
+		}
+
+		// Our finalizer has finished, so the reconciler can do nothing.
+		return reconcile.Result{}, nil
+	}
 
 	if !original.Spec.Enabled {
 		return ctrl.Result{}, nil
 	}
 
 	currentOperation := r.getCurrentScheduledOperation(original)
-	sleepCycleFullName := fmt.Sprintf("%v/%v", original.Namespace, original.Name)
 
 	desired := *original.DeepCopy()
 	desired.Status.LastRunOperation = currentOperation.String()
