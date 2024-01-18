@@ -24,7 +24,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"strings"
 	"time"
 
@@ -123,50 +122,50 @@ func (r *SleepCycleReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 	sleepCycleFullName := fmt.Sprintf("%v/%v", original.Namespace, original.Name)
 
-	//TODO: Add finalizer logic
+	//TODO: Bug finalizer creates a deadlock when removing or upgrading
 
-	if original.ObjectMeta.DeletionTimestamp.IsZero() {
-		// The object is not being deleted, so if it does not have our finalizer,
-		// then lets add the finalizer and update the object.
-		if !containsString(original.ObjectMeta.Finalizers, SleepCycleFinalizer) {
-			original.ObjectMeta.Finalizers = append(original.ObjectMeta.Finalizers, SleepCycleFinalizer)
-			if err := r.Update(ctx, &original); err != nil {
-				r.logger.Error(err, fmt.Sprintf("🛑️ %s", SleepCycleStatusUpdateFailure), "sleepcycle", sleepCycleFullName)
-				r.Recorder.Event(&original, corev1.EventTypeWarning, "SleepCycleStatus", strings.ToLower(SleepCycleStatusUpdateFailure))
-				return ctrl.Result{}, err
-			}
-		}
-	} else {
-		// The object is being deleted
-		if containsString(original.ObjectMeta.Finalizers, SleepCycleFinalizer) {
-			// our finalizer is present, so lets handle our external dependency
-			finalizers := []runtimeObjectFinalizer{r.FinalizeDeployments, r.FinalizeCronJobs, r.FinalizeStatefulSets, r.FinalizeHorizontalPodAutoscalers}
-			for _, finalizer := range finalizers {
-				result, err := finalizer(ctx, req, &original)
-				if err != nil {
-					r.logger.Error(err, fmt.Sprintf("🛑️ %s", SleepCycleFinalizerFailure), "sleepcycle", sleepCycleFullName)
-					r.Recorder.Event(&original, corev1.EventTypeWarning, "SleepCycleFinalizerFailure", fmt.Sprintf(
-						"%s: %s",
-						SleepCycleFinalizerFailure,
-						err.Error(),
-					))
-
-					return result, err
-				}
-			}
-
-			// remove our finalizer from the list and update it.
-			original.ObjectMeta.Finalizers = removeString(original.ObjectMeta.Finalizers, SleepCycleFinalizer)
-			if err := r.Update(ctx, &original); err != nil {
-				r.logger.Error(err, fmt.Sprintf("🛑️ %s", SleepCycleStatusUpdateFailure), "sleepcycle", sleepCycleFullName)
-				r.Recorder.Event(&original, corev1.EventTypeWarning, "SleepCycleStatus", strings.ToLower(SleepCycleStatusUpdateFailure))
-				return ctrl.Result{}, err
-			}
-		}
-
-		// Our finalizer has finished, so the reconciler can do nothing.
-		return reconcile.Result{}, nil
-	}
+	//if original.ObjectMeta.DeletionTimestamp.IsZero() {
+	//	// The object is not being deleted, so if it does not have our finalizer,
+	//	// then lets add the finalizer and update the object.
+	//	if !containsString(original.ObjectMeta.Finalizers, SleepCycleFinalizer) {
+	//		original.ObjectMeta.Finalizers = append(original.ObjectMeta.Finalizers, SleepCycleFinalizer)
+	//		if err := r.Update(ctx, &original); err != nil {
+	//			r.logger.Error(err, fmt.Sprintf("🛑️ %s", SleepCycleStatusUpdateFailure), "sleepcycle", sleepCycleFullName)
+	//			r.Recorder.Event(&original, corev1.EventTypeWarning, "SleepCycleStatus", strings.ToLower(SleepCycleStatusUpdateFailure))
+	//			return ctrl.Result{}, err
+	//		}
+	//	}
+	//} else {
+	//	// The object is being deleted
+	//	if containsString(original.ObjectMeta.Finalizers, SleepCycleFinalizer) {
+	//		// our finalizer is present, so lets handle our external dependency
+	//		finalizers := []runtimeObjectFinalizer{r.FinalizeDeployments, r.FinalizeCronJobs, r.FinalizeStatefulSets, r.FinalizeHorizontalPodAutoscalers}
+	//		for _, finalizer := range finalizers {
+	//			result, err := finalizer(ctx, req, &original)
+	//			if err != nil {
+	//				r.logger.Error(err, fmt.Sprintf("🛑️ %s", SleepCycleFinalizerFailure), "sleepcycle", sleepCycleFullName)
+	//				r.Recorder.Event(&original, corev1.EventTypeWarning, "SleepCycleFinalizerFailure", fmt.Sprintf(
+	//					"%s: %s",
+	//					SleepCycleFinalizerFailure,
+	//					err.Error(),
+	//				))
+	//
+	//				return result, err
+	//			}
+	//		}
+	//
+	//		// remove our finalizer from the list and update it.
+	//		original.ObjectMeta.Finalizers = removeString(original.ObjectMeta.Finalizers, SleepCycleFinalizer)
+	//		if err := r.Update(ctx, &original); err != nil {
+	//			r.logger.Error(err, fmt.Sprintf("🛑️ %s", SleepCycleStatusUpdateFailure), "sleepcycle", sleepCycleFullName)
+	//			r.Recorder.Event(&original, corev1.EventTypeWarning, "SleepCycleStatus", strings.ToLower(SleepCycleStatusUpdateFailure))
+	//			return ctrl.Result{}, err
+	//		}
+	//	}
+	//
+	//	// Our finalizer has finished, so the reconciler can do nothing.
+	//	return reconcile.Result{}, nil
+	//}
 
 	if !original.Spec.Enabled {
 		return ctrl.Result{}, nil
