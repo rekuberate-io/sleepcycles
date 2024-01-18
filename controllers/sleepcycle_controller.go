@@ -24,10 +24,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"strings"
 	"time"
 
-	"github.com/gorhill/cronexpr"
 	corev1alpha1 "github.com/rekuberate-io/sleepcycles/api/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv1 "k8s.io/api/autoscaling/v1"
@@ -43,8 +43,10 @@ import (
 
 const (
 	SleepCycleLabel                      = "rekuberate.io/sleepcycle"
+	SleepCycleFinalizer                  = "sleepcycle.core.rekuberate.io/finalizer"
 	TimeWindowToleranceInSeconds  int    = 30
 	SleepCycleStatusUpdateFailure string = "failed to update SleepCycle Status"
+	SleepCycleFinalizerFailure    string = "finalizer failed"
 )
 
 // SleepCycleReconciler reconciles a SleepCycle object
@@ -58,9 +60,15 @@ type SleepCycleReconciler struct {
 type runtimeObjectReconciler func(
 	ctx context.Context,
 	req ctrl.Request,
-	sleepCycle *corev1alpha1.SleepCycle,
-	deepCopy *corev1alpha1.SleepCycle,
+	original *corev1alpha1.SleepCycle,
+	desired *corev1alpha1.SleepCycle,
 	op SleepCycleOperation,
+) (ctrl.Result, error)
+
+type runtimeObjectFinalizer func(
+	ctx context.Context,
+	req ctrl.Request,
+	original *corev1alpha1.SleepCycle,
 ) (ctrl.Result, error)
 
 var (
@@ -102,10 +110,10 @@ var (
 func (r *SleepCycleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	r.logger = log.Log.WithValues("namespace", req.Namespace, "sleepcycle", req.Name)
 
-	var sleepCycle corev1alpha1.SleepCycle
-	if err := r.Get(ctx, req.NamespacedName, &sleepCycle); err != nil {
+	var original corev1alpha1.SleepCycle
+	if err := r.Get(ctx, req.NamespacedName, &original); err != nil {
 		if apierrors.IsNotFound(err) {
-			r.logger.Error(err, "🛑️ unable to find SleepCycle")
+			//r.logger.Error(err, "🛑️ unable to find SleepCycle")
 			return ctrl.Result{}, nil
 		}
 
@@ -113,17 +121,64 @@ func (r *SleepCycleReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, err
 	}
 
-	if !sleepCycle.Spec.Enabled {
+	sleepCycleFullName := fmt.Sprintf("%v/%v", original.Namespace, original.Name)
+
+	//TODO: Add finalizer logic
+
+	if original.ObjectMeta.DeletionTimestamp.IsZero() {
+		// The object is not being deleted, so if it does not have our finalizer,
+		// then lets add the finalizer and update the object.
+		if !containsString(original.ObjectMeta.Finalizers, SleepCycleFinalizer) {
+			original.ObjectMeta.Finalizers = append(original.ObjectMeta.Finalizers, SleepCycleFinalizer)
+			if err := r.Update(ctx, &original); err != nil {
+				r.logger.Error(err, fmt.Sprintf("🛑️ %s", SleepCycleStatusUpdateFailure), "sleepcycle", sleepCycleFullName)
+				r.Recorder.Event(&original, corev1.EventTypeWarning, "SleepCycleStatus", strings.ToLower(SleepCycleStatusUpdateFailure))
+				return ctrl.Result{}, err
+			}
+		}
+	} else {
+		// The object is being deleted
+		if containsString(original.ObjectMeta.Finalizers, SleepCycleFinalizer) {
+			// our finalizer is present, so lets handle our external dependency
+			finalizers := []runtimeObjectFinalizer{r.FinalizeDeployments, r.FinalizeCronJobs, r.FinalizeStatefulSets, r.FinalizeHorizontalPodAutoscalers}
+			for _, finalizer := range finalizers {
+				result, err := finalizer(ctx, req, &original)
+				if err != nil {
+					r.logger.Error(err, fmt.Sprintf("🛑️ %s", SleepCycleFinalizerFailure), "sleepcycle", sleepCycleFullName)
+					r.Recorder.Event(&original, corev1.EventTypeWarning, "SleepCycleFinalizerFailure", fmt.Sprintf(
+						"%s: %s",
+						SleepCycleFinalizerFailure,
+						err.Error(),
+					))
+
+					return result, err
+				}
+			}
+
+			// remove our finalizer from the list and update it.
+			original.ObjectMeta.Finalizers = removeString(original.ObjectMeta.Finalizers, SleepCycleFinalizer)
+			if err := r.Update(ctx, &original); err != nil {
+				r.logger.Error(err, fmt.Sprintf("🛑️ %s", SleepCycleStatusUpdateFailure), "sleepcycle", sleepCycleFullName)
+				r.Recorder.Event(&original, corev1.EventTypeWarning, "SleepCycleStatus", strings.ToLower(SleepCycleStatusUpdateFailure))
+				return ctrl.Result{}, err
+			}
+		}
+
+		// Our finalizer has finished, so the reconciler can do nothing.
+		return reconcile.Result{}, nil
+	}
+
+	if !original.Spec.Enabled {
 		return ctrl.Result{}, nil
 	}
 
-	currentOperation := r.getCurrentScheduledOperation(sleepCycle)
-	sleepCycleFullName := fmt.Sprintf("%v/%v", sleepCycle.Namespace, sleepCycle.Name)
+	currentOperation := r.getCurrentScheduledOperation(original)
 
-	deepCopy := *sleepCycle.DeepCopy()
-	if deepCopy.Status.UsedBy == nil {
+	desired := *original.DeepCopy()
+	desired.Status.LastRunOperation = currentOperation.String()
+	if desired.Status.UsedBy == nil {
 		usedBy := make(map[string]int)
-		deepCopy.Status.UsedBy = usedBy
+		desired.Status.UsedBy = usedBy
 	}
 
 	r.logger = r.logger.WithValues("op", currentOperation.String())
@@ -132,16 +187,16 @@ func (r *SleepCycleReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		reconcilers := []runtimeObjectReconciler{r.ReconcileDeployments, r.ReconcileCronJobs, r.ReconcileStatefulSets, r.ReconcileHorizontalPodAutoscalers}
 
 		for _, reconciler := range reconcilers {
-			result, err := reconciler(ctx, req, &sleepCycle, &deepCopy, currentOperation)
+			result, err := reconciler(ctx, req, &original, &desired, currentOperation)
 			if err != nil {
 				if currentOperation != Watch {
-					deepCopy.Status.LastRunTime = &metav1.Time{Time: time.Now()}
-					deepCopy.Status.LastRunWasSuccessful = false
+					desired.Status.LastRunTime = &metav1.Time{Time: time.Now()}
+					desired.Status.LastRunWasSuccessful = false
 				}
 
-				if err := r.Status().Update(ctx, &deepCopy); err != nil {
+				if err := r.Status().Update(ctx, &desired); err != nil {
 					r.logger.Error(err, fmt.Sprintf("🛑️ %s", SleepCycleStatusUpdateFailure), "sleepcycle", sleepCycleFullName)
-					r.Recorder.Event(&sleepCycle, corev1.EventTypeWarning, "SleepCycleStatus", strings.ToLower(SleepCycleStatusUpdateFailure))
+					r.Recorder.Event(&original, corev1.EventTypeWarning, "SleepCycleStatus", strings.ToLower(SleepCycleStatusUpdateFailure))
 					return ctrl.Result{}, err
 				}
 
@@ -149,25 +204,29 @@ func (r *SleepCycleReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			}
 		}
 
-		deepCopy.Status.LastRunTime = &metav1.Time{Time: time.Now()}
-		deepCopy.Status.LastRunWasSuccessful = true
+		desired.Status.LastRunTime = &metav1.Time{Time: time.Now()}
+		desired.Status.LastRunWasSuccessful = true
 	}
 
-	nextScheduledShutdown, nextScheduledWakeup := r.getSchedulesTime(sleepCycle, false)
+	nextScheduledShutdown, nextScheduledWakeup := r.getSchedulesTime(original, false)
 	if nextScheduledWakeup != nil {
-		deepCopy.Status.NextScheduledWakeupTime = &metav1.Time{Time: *nextScheduledWakeup}
+		tz := r.getTimeZone(original.Spec.WakeupTimeZone)
+		t := nextScheduledWakeup.In(tz)
+		desired.Status.NextScheduledWakeupTime = &metav1.Time{Time: t}
 	} else {
-		deepCopy.Status.NextScheduledWakeupTime = nil
+		desired.Status.NextScheduledWakeupTime = nil
 	}
-	deepCopy.Status.NextScheduledShutdownTime = &metav1.Time{Time: *nextScheduledShutdown}
+	tz := r.getTimeZone(original.Spec.ShutdownTimeZone)
+	t := nextScheduledShutdown.In(tz)
+	desired.Status.NextScheduledShutdownTime = &metav1.Time{Time: t}
 
-	if err := r.Status().Update(ctx, &deepCopy); err != nil {
+	if err := r.Status().Update(ctx, &desired); err != nil {
 		r.logger.Error(err, fmt.Sprintf("🛑️ %s", SleepCycleStatusUpdateFailure), "sleepcycle", sleepCycleFullName)
-		r.Recorder.Event(&sleepCycle, corev1.EventTypeWarning, "SleepCycleStatus", strings.ToLower(SleepCycleStatusUpdateFailure))
+		r.Recorder.Event(&original, corev1.EventTypeWarning, "SleepCycleStatus", strings.ToLower(SleepCycleStatusUpdateFailure))
 		return ctrl.Result{}, err
 	}
 
-	nextOperation, requeueAfter := r.getNextScheduledOperation(sleepCycle, &currentOperation)
+	nextOperation, requeueAfter := r.getNextScheduledOperation(original, &currentOperation)
 
 	r.logger.Info("Requeue", "next-op", nextOperation.String(), "after", requeueAfter)
 	return ctrl.Result{RequeueAfter: requeueAfter}, nil
@@ -244,390 +303,7 @@ func (r *SleepCycleReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-func (r *SleepCycleReconciler) ReconcileDeployments(
-	ctx context.Context,
-	req ctrl.Request,
-	sleepCycle *corev1alpha1.SleepCycle,
-	deepCopy *corev1alpha1.SleepCycle,
-	op SleepCycleOperation,
-) (ctrl.Result, error) {
-	deploymentList := appsv1.DeploymentList{}
-	if err := r.List(ctx, &deploymentList, &client.ListOptions{Namespace: req.NamespacedName.Namespace}); err != nil {
-		return ctrl.Result{}, err
-	}
-
-	if len(deploymentList.Items) == 0 {
-		return ctrl.Result{}, nil
-	}
-
-	r.logger.Info("📚 Processing Deployments")
-
-	for _, deployment := range deploymentList.Items {
-		hasSleepCycle := r.isTagged(&deployment.ObjectMeta, sleepCycle.Name)
-
-		if hasSleepCycle {
-			deploymentFullName := fmt.Sprintf("%v/%v", deployment.Namespace, deployment.Name)
-			deepCopy.Status.Enabled = sleepCycle.Spec.Enabled
-
-			currentReplicas := int(deployment.Status.Replicas)
-			val, ok := deepCopy.Status.UsedBy[deploymentFullName]
-			if !ok || (ok && val < currentReplicas && currentReplicas > 0) {
-				deepCopy.Status.UsedBy[deploymentFullName] = currentReplicas
-			}
-
-			switch op {
-			case Watch:
-			case Shutdown:
-				if deployment.Status.Replicas != 0 {
-					err := r.ScaleDeployment(ctx, deployment, 0)
-					if err != nil {
-						r.logger.Error(err, "🛑️ Scaling Deployment failed", "deployment", deploymentFullName)
-						r.recordEvent(*sleepCycle, true, deploymentFullName, op)
-						return ctrl.Result{}, err
-					}
-
-					r.logger.Info("🌙 Scaled Down Deployment", "deployment", deploymentFullName, "targetReplicas", 0)
-				}
-			case WakeUp:
-				targetReplicas := int32(deepCopy.Status.UsedBy[deploymentFullName])
-
-				if deployment.Status.Replicas != targetReplicas {
-					err := r.ScaleDeployment(ctx, deployment, targetReplicas)
-					if err != nil {
-						r.logger.Error(err, "🛑️ Scaling Deployment failed", "deployment", deploymentFullName)
-						r.recordEvent(*sleepCycle, true, deploymentFullName, op)
-						return ctrl.Result{}, err
-					}
-
-					r.logger.Info("☀️  Scaled Up Deployment", "deployment", deploymentFullName, "targetReplicas", targetReplicas)
-				}
-			}
-		}
-	}
-
-	return ctrl.Result{}, nil
-}
-
-func (r *SleepCycleReconciler) ReconcileCronJobs(ctx context.Context,
-	req ctrl.Request,
-	sleepCycle *corev1alpha1.SleepCycle,
-	deepCopy *corev1alpha1.SleepCycle,
-	op SleepCycleOperation,
-) (ctrl.Result, error) {
-	cronJobList := batchv1.CronJobList{}
-	if err := r.List(ctx, &cronJobList, &client.ListOptions{Namespace: req.NamespacedName.Namespace}); err != nil {
-		return ctrl.Result{}, err
-	}
-
-	if len(cronJobList.Items) == 0 {
-		return ctrl.Result{}, nil
-	}
-
-	r.logger.Info("🕑 Processing CronJobs")
-
-	for _, cronJob := range cronJobList.Items {
-		hasSleepCycle := r.isTagged(&cronJob.ObjectMeta, sleepCycle.Name)
-
-		if hasSleepCycle {
-			cronJobFullName := fmt.Sprintf("%v/%v", cronJob.Namespace, cronJob.Name)
-
-			switch op {
-			case Watch:
-			case Shutdown:
-				if !*cronJob.Spec.Suspend {
-					err := r.SuspendCronJob(ctx, cronJob, true)
-					if err != nil {
-						r.logger.Error(err, "🛑️️ Suspending CronJob failed", "cronJob", cronJobFullName)
-						r.recordEvent(*sleepCycle, true, cronJobFullName, op)
-						return ctrl.Result{}, err
-					}
-
-					r.logger.Info("🌙 Suspended CronJob", "cronJob", cronJobFullName)
-				}
-			case WakeUp:
-				if *cronJob.Spec.Suspend {
-					err := r.SuspendCronJob(ctx, cronJob, false)
-					if err != nil {
-						r.logger.Error(err, "🛑️️ Suspending CronJob failed", "cronJob", cronJobFullName)
-						r.recordEvent(*sleepCycle, true, cronJobFullName, op)
-						return ctrl.Result{}, err
-					}
-
-					r.logger.Info("☀️  Enabled Cronjob", "cronJob", cronJobFullName)
-				}
-			}
-		}
-	}
-
-	return ctrl.Result{}, nil
-}
-
-func (r *SleepCycleReconciler) ReconcileStatefulSets(
-	ctx context.Context,
-	req ctrl.Request,
-	sleepCycle *corev1alpha1.SleepCycle,
-	deepCopy *corev1alpha1.SleepCycle,
-	op SleepCycleOperation,
-) (ctrl.Result, error) {
-	statefulSetList := appsv1.StatefulSetList{}
-	if err := r.List(ctx, &statefulSetList, &client.ListOptions{Namespace: req.NamespacedName.Namespace}); err != nil {
-		return ctrl.Result{}, err
-	}
-
-	if len(statefulSetList.Items) == 0 {
-		return ctrl.Result{}, nil
-	}
-
-	r.logger.Info("📦 Processing StatefulSets")
-
-	for _, statefulSet := range statefulSetList.Items {
-		hasSleepCycle := r.isTagged(&statefulSet.ObjectMeta, sleepCycle.Name)
-
-		if hasSleepCycle {
-			statefulSetFullName := fmt.Sprintf("%v/%v", statefulSet.Namespace, statefulSet.Name)
-			deepCopy.Status.Enabled = sleepCycle.Spec.Enabled
-
-			currentReplicas := int(statefulSet.Status.Replicas)
-			val, ok := deepCopy.Status.UsedBy[statefulSetFullName]
-			if !ok || (ok && val < currentReplicas && currentReplicas > 0) {
-				deepCopy.Status.UsedBy[statefulSetFullName] = currentReplicas
-			}
-
-			switch op {
-			case Watch:
-			case Shutdown:
-				if statefulSet.Status.Replicas != 0 {
-					err := r.ScaleStatefulSet(ctx, statefulSet, 0)
-					if err != nil {
-						r.logger.Error(err, "🛑️ Scaling StatefulSet failed", "statefulSet", statefulSetFullName)
-						r.recordEvent(*sleepCycle, true, statefulSetFullName, op)
-						return ctrl.Result{}, err
-					}
-
-					r.logger.Info("🌙 Scaled Down StatefulSet", "statefulSet", statefulSetFullName, "targetReplicas", 0)
-				}
-			case WakeUp:
-				targetReplicas := int32(deepCopy.Status.UsedBy[statefulSetFullName])
-
-				if statefulSet.Status.Replicas != targetReplicas {
-					err := r.ScaleStatefulSet(ctx, statefulSet, targetReplicas)
-					if err != nil {
-						r.logger.Error(err, "🛑️ Scaling StatefulSet failed", "statefulSet", statefulSetFullName)
-						r.recordEvent(*sleepCycle, true, statefulSetFullName, op)
-						return ctrl.Result{}, err
-					}
-
-					r.logger.Info("☀️  Scaled Up StatefulSet", "statefulSet", statefulSetFullName, "targetReplicas", targetReplicas)
-				}
-			}
-		}
-	}
-
-	return ctrl.Result{}, nil
-}
-
-func (r *SleepCycleReconciler) ReconcileHorizontalPodAutoscalers(
-	ctx context.Context,
-	req ctrl.Request,
-	sleepCycle *corev1alpha1.SleepCycle,
-	deepCopy *corev1alpha1.SleepCycle,
-	op SleepCycleOperation,
-) (ctrl.Result, error) {
-	hpaList := autoscalingv1.HorizontalPodAutoscalerList{}
-	if err := r.List(ctx, &hpaList, &client.ListOptions{Namespace: req.NamespacedName.Namespace}); err != nil {
-		return ctrl.Result{}, err
-	}
-
-	if len(hpaList.Items) == 0 {
-		return ctrl.Result{}, nil
-	}
-
-	r.logger.Info("📈 Processing HorizontalPodAutoscalers")
-
-	for _, hpa := range hpaList.Items {
-		hasSleepCycle := r.isTagged(&hpa.ObjectMeta, sleepCycle.Name)
-
-		if hasSleepCycle {
-			hpaFullName := fmt.Sprintf("%v/%v", hpa.Namespace, hpa.Name)
-			deepCopy.Status.Enabled = sleepCycle.Spec.Enabled
-
-			maxReplicas := int(hpa.Spec.MaxReplicas)
-			val, ok := deepCopy.Status.UsedBy[hpaFullName]
-			if !ok || (ok && val < maxReplicas && maxReplicas > 0) {
-				deepCopy.Status.UsedBy[hpaFullName] = maxReplicas
-			}
-
-			switch op {
-			case Watch:
-			case Shutdown:
-				if hpa.Spec.MaxReplicas != 1 {
-					err := r.ScaleHorizontalPodAutoscaler(ctx, hpa, 1)
-					if err != nil {
-						r.logger.Error(err, "🛑️ Scaling HorizontalPodAutoscaler failed", "hpa", hpaFullName)
-						r.recordEvent(*sleepCycle, true, hpaFullName, op)
-						return ctrl.Result{}, err
-					}
-
-					r.logger.Info("🌙 Scaled Down HorizontalPodAutoscaler", "hpa", hpaFullName, "maxReplicas", 1)
-				}
-			case WakeUp:
-				targetReplicas := int32(deepCopy.Status.UsedBy[hpaFullName])
-
-				if hpa.Spec.MaxReplicas != targetReplicas {
-					err := r.ScaleHorizontalPodAutoscaler(ctx, hpa, targetReplicas)
-					if err != nil {
-						r.logger.Error(err, "🛑️ Scaling HorizontalPodAutoscaler failed", "hpa", hpaFullName)
-						r.recordEvent(*sleepCycle, true, hpaFullName, op)
-						return ctrl.Result{}, err
-					}
-
-					r.logger.Info("☀️  Scaled Up HorizontalPodAutoscaler", "hpa", hpaFullName, "maxReplicas", targetReplicas)
-				}
-			}
-		}
-	}
-
-	return ctrl.Result{}, nil
-}
-
-func (r *SleepCycleReconciler) getCurrentScheduledOperation(sleepCycle corev1alpha1.SleepCycle) SleepCycleOperation {
-	nextScheduledShutdown, nextScheduledWakeup := r.getSchedulesTime(sleepCycle, true)
-	nextScheduledShutdownTimeWindow := r.getScheduleTimeWindow(nextScheduledShutdown)
-	nextScheduledWakeupTimeWindow := r.getScheduleTimeWindow(nextScheduledWakeup)
-
-	var isWithinScheduleForShutdown, isWithinScheduleForWakeup = false, false
-	isWithinScheduleForShutdown = nextScheduledShutdownTimeWindow.IsScheduleWithinWindow(time.Now())
-
-	if nextScheduledWakeup == nil {
-		if !isWithinScheduleForShutdown {
-			return Watch
-		}
-
-		return Shutdown
-	}
-
-	isWithinScheduleForWakeup = nextScheduledWakeupTimeWindow.IsScheduleWithinWindow(time.Now())
-
-	if nextScheduledShutdown.Before(*nextScheduledWakeup) && isWithinScheduleForShutdown {
-		return Shutdown
-	}
-
-	if nextScheduledWakeup.Before(*nextScheduledShutdown) && isWithinScheduleForWakeup {
-		return WakeUp
-	}
-
-	if isWithinScheduleForShutdown && isWithinScheduleForWakeup {
-		return WakeUp
-	}
-
-	return Watch
-}
-
-func (r *SleepCycleReconciler) getNextScheduledOperation(sleepCycle corev1alpha1.SleepCycle, currentOperation *SleepCycleOperation) (SleepCycleOperation, time.Duration) {
-	var requeueAfter time.Duration
-
-	if currentOperation == nil {
-		*currentOperation = r.getCurrentScheduledOperation(sleepCycle)
-	}
-
-	nextScheduledShutdown, nextScheduledWakeup := r.getSchedulesTime(sleepCycle, false)
-	var nextOperation SleepCycleOperation
-
-	switch *currentOperation {
-	case Watch:
-		if nextScheduledWakeup == nil {
-			nextOperation = Shutdown
-			requeueAfter = time.Until(*nextScheduledShutdown)
-		} else {
-			if nextScheduledShutdown.Before(*nextScheduledWakeup) {
-				nextOperation = Shutdown
-				requeueAfter = time.Until(*nextScheduledShutdown)
-			} else {
-				nextOperation = WakeUp
-				requeueAfter = time.Until(*nextScheduledWakeup)
-			}
-		}
-	case Shutdown:
-		if nextScheduledWakeup == nil {
-			nextOperation = Shutdown
-			requeueAfter = time.Until(*nextScheduledShutdown)
-		} else {
-			nextOperation = WakeUp
-			requeueAfter = time.Until(*nextScheduledWakeup)
-		}
-	case WakeUp:
-		nextOperation = Shutdown
-		requeueAfter = time.Until(*nextScheduledShutdown)
-	}
-
-	return nextOperation, requeueAfter
-}
-
-func (r *SleepCycleReconciler) getScheduleTimeWindow(timestamp *time.Time) *TimeWindow {
-	if timestamp != nil {
-		return NewTimeWindow(*timestamp)
-	}
-
-	return nil
-}
-
-func (r *SleepCycleReconciler) getSchedulesTime(sleepCycle corev1alpha1.SleepCycle, useStatus bool) (shutdown *time.Time, wakeup *time.Time) {
-
-	shutdown = nil
-	wakeup = nil
-
-	if !useStatus {
-		shutdown = r.getTimeFromCronExpression(sleepCycle.Spec.Shutdown)
-		wakeup = r.getTimeFromCronExpression(sleepCycle.Spec.WakeUp)
-	} else {
-		if sleepCycle.Status.NextScheduledWakeupTime != nil {
-			wakeupTimeWindow := NewTimeWindow(sleepCycle.Status.NextScheduledWakeupTime.Time)
-
-			if wakeupTimeWindow.Right.Before(time.Now()) {
-				wakeup = r.getTimeFromCronExpression(sleepCycle.Spec.WakeUp)
-			} else {
-				wakeup = &sleepCycle.Status.NextScheduledWakeupTime.Time
-			}
-		} else {
-			wakeup = r.getTimeFromCronExpression(sleepCycle.Spec.WakeUp)
-		}
-
-		if sleepCycle.Status.NextScheduledShutdownTime != nil {
-			shutdownTimeWindow := NewTimeWindow(sleepCycle.Status.NextScheduledShutdownTime.Time)
-
-			if shutdownTimeWindow.Right.Before(time.Now()) {
-				shutdown = r.getTimeFromCronExpression(sleepCycle.Spec.Shutdown)
-			} else {
-				shutdown = &sleepCycle.Status.NextScheduledShutdownTime.Time
-			}
-		} else {
-			shutdown = r.getTimeFromCronExpression(sleepCycle.Spec.Shutdown)
-		}
-	}
-
-	return shutdown, wakeup
-}
-
-func (r *SleepCycleReconciler) getTimeFromCronExpression(cronexp string) *time.Time {
-	cronExpression, err := cronexpr.Parse(cronexp)
-	if err == nil {
-		t := cronExpression.Next(time.Now())
-		return &t
-	}
-	return nil
-}
-
-func (r *SleepCycleReconciler) isTagged(obj *metav1.ObjectMeta, tag string) bool {
-	val, ok := obj.GetLabels()[SleepCycleLabel]
-
-	if ok && val == tag {
-		return true
-	}
-
-	return false
-}
-
-func (r *SleepCycleReconciler) recordEvent(sleepCycle corev1alpha1.SleepCycle, isError bool, namespacedName string, operation SleepCycleOperation) {
+func (r *SleepCycleReconciler) RecordEvent(sleepCycle corev1alpha1.SleepCycle, isError bool, namespacedName string, operation SleepCycleOperation, extra ...string) {
 	eventType := corev1.EventTypeNormal
 	reason := "SleepCycleOpSuccess"
 	message := fmt.Sprintf("%s on %s succeeded", operation.String(), namespacedName)
@@ -636,6 +312,10 @@ func (r *SleepCycleReconciler) recordEvent(sleepCycle corev1alpha1.SleepCycle, i
 		eventType = corev1.EventTypeWarning
 		reason = "SleepCycleOpFailure"
 		message = fmt.Sprintf("%s on %s failed", operation.String(), namespacedName)
+	}
+
+	for _, s := range extra {
+		message = message + ". " + s
 	}
 
 	r.Recorder.Event(&sleepCycle, eventType, reason, strings.ToLower(message))

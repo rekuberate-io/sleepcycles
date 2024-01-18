@@ -19,12 +19,15 @@ metadata:
   name: sleepcycle-sample
 spec:
   shutdown: "0 20 * * *"
+  shutdownTimeZone: "Europe/Athens"
   wakeup: "30 7 * * 1-5"
+  wakeupTimeZone: "Europe/Dublin"
   enabled: true
 ```
 
-You need to provide to every `SleepCycle` the `shutdown` (mandatory) and `wakeup` (non-mandatory) policies via Cron expressions (**do not include seconds**). 
-The example above will set a `SleepCycle` schedule shutting down your workloads **every day at 20:00 UTC** and waking them up **every weekday at 07:30 UTC**.
+You need to provide to every `SleepCycle` the `shutdown` (mandatory) and `wakeup` (non-mandatory) policies via Cron expressions (**do not include seconds or timezone**). 
+Additionally you can provide schedules on different timezones via the (non-mandatory) fields `shutdownTimeZone` and  `wakeupTimeZone`. If they're not provided they default to **UTC**.
+The example above will set a `SleepCycle` schedule shutting down  your workloads **every day at 20:00 Athens local time** and waking them up **every weekday at 07:30 Dublin local time**.
 
 `SleepCycle` is a Namespaced Custom Resource, and the controller will monitor all the resources in the Namespace you installed the
 `SleepCycle` manifest and they are marked with a `Label` that has as key `rekuberate.io/sleepcycle:` and as value the `name` of the manifest you created:

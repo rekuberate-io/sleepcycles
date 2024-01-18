@@ -17,25 +17,25 @@ spec:
   versions:
   - additionalPrinterColumns:
     - jsonPath: .spec.shutdown
-      name: Shutdown
+      name: Shutdown Schedule
+      type: string
+    - jsonPath: .spec.shutdownTimeZone
+      name: Shutdown Timezone
       type: string
     - jsonPath: .spec.wakeup
-      name: Wakeup
+      name: Wakeup Schedule
+      type: string
+    - jsonPath: .spec.wakeupTimeZone
+      name: Wakeup Timezone
       type: string
     - jsonPath: .spec.enabled
       name: Enabled
       type: boolean
-    - jsonPath: .status.nextScheduledShutdown
-      name: Next Shutdown
-      type: string
-    - jsonPath: .status.nextScheduledWakeUp
-      name: Next Wake Up
-      type: string
-    - jsonPath: .status.lastRunTime
-      name: Last Run
-      type: string
     - jsonPath: .status.lastRunWasSuccessful
-      name: Last Run Success
+      name: Success
+      type: boolean
+    - jsonPath: .status.lastRunOperation
+      name: Last Op
       type: string
     name: v1alpha1
     schema:
@@ -62,8 +62,14 @@ spec:
               shutdown:
                 pattern: (^((\*\/)?([0-5]?[0-9])((\,|\-|\/)([0-5]?[0-9]))*|\*)\s+((\*\/)?((2[0-3]|1[0-9]|[0-9]|00))((\,|\-|\/)(2[0-3]|1[0-9]|[0-9]|00))*|\*)\s+((\*\/)?([1-9]|[12][0-9]|3[01])((\,|\-|\/)([1-9]|[12][0-9]|3[01]))*|\*)\s+((\*\/)?([1-9]|1[0-2])((\,|\-|\/)([1-9]|1[0-2]))*|\*|(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|des))\s+((\*\/)?[0-6]((\,|\-|\/)[0-6])*|\*|00|(sun|mon|tue|wed|thu|fri|sat))\s*$)|@(annually|yearly|monthly|weekly|daily|hourly|reboot)
                 type: string
+              shutdownTimeZone:
+                default: UTC
+                type: string
               wakeup:
                 pattern: (^((\*\/)?([0-5]?[0-9])((\,|\-|\/)([0-5]?[0-9]))*|\*)\s+((\*\/)?((2[0-3]|1[0-9]|[0-9]|00))((\,|\-|\/)(2[0-3]|1[0-9]|[0-9]|00))*|\*)\s+((\*\/)?([1-9]|[12][0-9]|3[01])((\,|\-|\/)([1-9]|[12][0-9]|3[01]))*|\*)\s+((\*\/)?([1-9]|1[0-2])((\,|\-|\/)([1-9]|1[0-2]))*|\*|(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|des))\s+((\*\/)?[0-6]((\,|\-|\/)[0-6])*|\*|00|(sun|mon|tue|wed|thu|fri|sat))\s*$)|@(annually|yearly|monthly|weekly|daily|hourly|reboot)
+                type: string
+              wakeupTimeZone:
+                default: UTC
                 type: string
             required:
             - enabled
@@ -74,6 +80,8 @@ spec:
             properties:
               enabled:
                 type: boolean
+              lastRunOperation:
+                type: string
               lastRunTime:
                 format: date-time
                 type: string
