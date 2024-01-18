@@ -47,22 +47,39 @@ spec:
 ```
 
 ### Running on the cluster
-1. Install Instances of Custom Resources:
+
+1. Build and push your image to the location specified by `IMG` in `Makefile`:
+
+```shell
+# Image URL to use all building/pushing image targets
+IMG_TAG ?= $(shell git rev-parse --short HEAD)
+IMG_NAME ?= strato-dyndns
+DOCKER_HUB_NAME ?= $(shell docker info | sed '/Username:/!d;s/.* //')
+IMG ?= $(DOCKER_HUB_NAME)/$(IMG_NAME):$(IMG_TAG)
+```
+
+```sh
+make docker-build docker-push
+```
+
+2. Deploy the controller to the cluster with the image using `IMG`:
+
+```sh
+make deploy
+```
+
+or
+
+3. Deploy the controller to the cluster with the image using Helm chart:
+
+```sh
+helm install rekuberate-io-sleepcycles config/helm/
+```
+
+4. Install Instances of Custom Resources:
 
 ```sh
 kubectl apply -f config/samples/
-```
-
-2. Build and push your image to the location specified by `IMG`:
-	
-```sh
-make docker-build docker-push IMG=<some-registry>/sleepcycles:tag
-```
-	
-3. Deploy the controller to the cluster with the image specified by `IMG`:
-
-```sh
-make deploy IMG=<some-registry>/sleepcycles:tag
 ```
 
 ### Uninstall CRDs
@@ -77,6 +94,11 @@ UnDeploy the controller to the cluster:
 
 ```sh
 make undeploy
+```
+or if you have installed via Helm:
+
+```shell
+helm uninstall rekuberate-io-sleepcycles
 ```
 
 ## Contributing
