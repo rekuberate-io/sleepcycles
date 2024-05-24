@@ -1,0 +1,23 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app-2
+  namespace: app-2
+  labels:
+    app: app-2
+    rekuberate.io/sleepcycle: sleepcycle-app-2
+spec:
+  replicas: 9
+  selector:
+    matchLabels:
+      app: app-2
+  template:
+    metadata:
+      name: app-2
+      labels:
+        app: app-2
+    spec:
+      containers:
+        - name: app-2
+          image: traefik/whoami
+          imagePullPolicy: IfNotPresent
