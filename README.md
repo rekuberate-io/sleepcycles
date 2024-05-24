@@ -1,6 +1,4 @@
-<p align="center">
-  <img width="256" height="250" src="https://github.com/rekuberate-io/sleepcycles/blob/main/docs/images/rekuberate-sleepcycle-banner.png?raw=true">
-</p>
+![rekuberate-sleepcycle-banner.png](docs/images/rekuberate-sleepcycle-banner.png)
 
 Define sleep & wake up cycles for your Kubernetes resources. Automatically schedule to shutdown Deployments, CronJobs, StatefulSets and HorizontalPodAutoscalers that occupy resources in your cluster and wake them up only when you need them, reducing that way the overall power consumption.
 
