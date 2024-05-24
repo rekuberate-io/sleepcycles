@@ -5,9 +5,7 @@
 Define sleep & wake up cycles for your Kubernetes resources. Automatically schedule to shutdown Deployments, CronJobs, StatefulSets and HorizontalPodAutoscalers that occupy resources in your cluster and wake them up only when you need them, reducing that way the overall power consumption.
 
 > [!TIP]
-> You can read more in this [article](https://medium.com/@akyriako/rekuberate-io-sleepcycles-an-automated-way-to-reclaim-your-unused-kubernetes-resources-852e8db313ec).
-
-![](https://private-user-images.githubusercontent.com/3920167/333529939-275f5780-6bc7-4904-a4bb-71a440729a39.webm?jwt=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJnaXRodWIuY29tIiwiYXVkIjoicmF3LmdpdGh1YnVzZXJjb250ZW50LmNvbSIsImtleSI6ImtleTUiLCJleHAiOjE3MTY1NTU2MjQsIm5iZiI6MTcxNjU1NTMyNCwicGF0aCI6Ii8zOTIwMTY3LzMzMzUyOTkzOS0yNzVmNTc4MC02YmM3LTQ5MDQtYTRiYi03MWE0NDA3MjlhMzkud2VibT9YLUFtei1BbGdvcml0aG09QVdTNC1ITUFDLVNIQTI1NiZYLUFtei1DcmVkZW50aWFsPUFLSUFWQ09EWUxTQTUzUFFLNFpBJTJGMjAyNDA1MjQlMkZ1cy1lYXN0LTElMkZzMyUyRmF3czRfcmVxdWVzdCZYLUFtei1EYXRlPTIwMjQwNTI0VDEyNTUyNFomWC1BbXotRXhwaXJlcz0zMDAmWC1BbXotU2lnbmF0dXJlPWE5MDQzMWMyOTJhN2FmNmJlMDY2NDQ3OWU1MzVjYjZlY2IxYjkzNjQ5YWE3Y2EzM2JkMTE4YjVkZjYyMThmY2QmWC1BbXotU2lnbmVkSGVhZGVycz1ob3N0JmFjdG9yX2lkPTAma2V5X2lkPTAmcmVwb19pZD0wIn0.rbY9vKrFD-5LukIWrNuHzRob8VQhujS_QVgGROQ6nrQ)
+> You can read more in this Medium article: [rekuberate-io/sleepcycles: An automated way to reclaim your unused Kubernetes resources](https://medium.com/@akyriako/rekuberate-io-sleepcycles-an-automated-way-to-reclaim-your-unused-kubernetes-resources-852e8db313ec).
 
 ## Getting Started
 You’ll need a Kubernetes cluster to run against. You can use [KIND](https://sigs.k8s.io/kind) or [K3D](https://k3d.io) to get a local cluster for testing, or run against a remote cluster.
