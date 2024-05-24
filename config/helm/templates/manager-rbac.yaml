@@ -6,6 +6,13 @@ metadata:
   {{- include "helm.labels" . | nindent 4 }}
 rules:
 - apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - create
+  - patch
+- apiGroups:
   - apps
   resources:
   - deployments

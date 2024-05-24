@@ -13,4 +13,4 @@ kind: Kustomization
 images:
 - name: controller
   newName: akyriako78/rekuberate-io-sleepcycles
-  newTag: 130c43e
+  newTag: 0.1.2

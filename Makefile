@@ -1,6 +1,7 @@
 
 # Image URL to use all building/pushing image targets
-IMG_TAG ?= $(shell git rev-parse --short HEAD)
+#IMG_TAG ?= $(shell git rev-parse --short HEAD)
+IMG_TAG ?= 0.1.2
 IMG_NAME ?= rekuberate-io-sleepcycles
 DOCKER_HUB_NAME ?= $(shell docker info | sed '/Username:/!d;s/.* //')
 IMG ?= $(DOCKER_HUB_NAME)/$(IMG_NAME):$(IMG_TAG)
