@@ -4,7 +4,10 @@
 
 Define sleep & wake up cycles for your Kubernetes resources. Automatically schedule to shutdown Deployments, CronJobs, StatefulSets and HorizontalPodAutoscalers that occupy resources in your cluster and wake them up only when you need them, reducing that way the overall power consumption.
 
-You can read more in this [article](https://medium.com/@akyriako/rekuberate-io-sleepcycles-an-automated-way-to-reclaim-your-unused-kubernetes-resources-852e8db313ec).
+> [!TIP]
+> You can read more in this [article](https://medium.com/@akyriako/rekuberate-io-sleepcycles-an-automated-way-to-reclaim-your-unused-kubernetes-resources-852e8db313ec).
+
+![](https://private-user-images.githubusercontent.com/3920167/333529939-275f5780-6bc7-4904-a4bb-71a440729a39.webm?jwt=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJnaXRodWIuY29tIiwiYXVkIjoicmF3LmdpdGh1YnVzZXJjb250ZW50LmNvbSIsImtleSI6ImtleTUiLCJleHAiOjE3MTY1NTU2MjQsIm5iZiI6MTcxNjU1NTMyNCwicGF0aCI6Ii8zOTIwMTY3LzMzMzUyOTkzOS0yNzVmNTc4MC02YmM3LTQ5MDQtYTRiYi03MWE0NDA3MjlhMzkud2VibT9YLUFtei1BbGdvcml0aG09QVdTNC1ITUFDLVNIQTI1NiZYLUFtei1DcmVkZW50aWFsPUFLSUFWQ09EWUxTQTUzUFFLNFpBJTJGMjAyNDA1MjQlMkZ1cy1lYXN0LTElMkZzMyUyRmF3czRfcmVxdWVzdCZYLUFtei1EYXRlPTIwMjQwNTI0VDEyNTUyNFomWC1BbXotRXhwaXJlcz0zMDAmWC1BbXotU2lnbmF0dXJlPWE5MDQzMWMyOTJhN2FmNmJlMDY2NDQ3OWU1MzVjYjZlY2IxYjkzNjQ5YWE3Y2EzM2JkMTE4YjVkZjYyMThmY2QmWC1BbXotU2lnbmVkSGVhZGVycz1ob3N0JmFjdG9yX2lkPTAma2V5X2lkPTAmcmVwb19pZD0wIn0.rbY9vKrFD-5LukIWrNuHzRob8VQhujS_QVgGROQ6nrQ)
 
 ## Getting Started
 You’ll need a Kubernetes cluster to run against. You can use [KIND](https://sigs.k8s.io/kind) or [K3D](https://k3d.io) to get a local cluster for testing, or run against a remote cluster.
@@ -29,7 +32,7 @@ You need to provide to every `SleepCycle` the `shutdown` (mandatory) and `wakeup
 Additionally you can provide schedules on different timezones via the (non-mandatory) fields `shutdownTimeZone` and  `wakeupTimeZone`. If they're not provided they default to **UTC**.
 The example above will set a `SleepCycle` schedule shutting down  your workloads **every day at 20:00 Athens local time** and waking them up **every weekday at 07:30 Dublin local time**.
 
-`SleepCycle` is a Namespaced Custom Resource, and the controller will monitor all the resources in the Namespace you installed the
+`SleepCycle` is a **Namespaced Custom Resource**, and the controller will monitor all the resources in the Namespace you installed the
 `SleepCycle` manifest and they are marked with a `Label` that has as key `rekuberate.io/sleepcycle:` and as value the `name` of the manifest you created:
 
 ```yaml
@@ -70,7 +73,7 @@ make deploy
 
 or
 
-3. Deploy the controller to the cluster with the image using Helm chart:
+3. Deploy the controller to the cluster with the image using a **Helm chart**:
 
 ```sh
 helm install rekuberate-io-sleepcycles config/helm/
