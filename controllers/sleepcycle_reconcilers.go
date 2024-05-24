@@ -43,7 +43,7 @@ func (r *SleepCycleReconciler) ReconcileDeployments(
 
 			currentReplicas := int(deployment.Status.Replicas)
 			val, ok := desired.Status.UsedBy[deploymentFullName]
-			if !ok || (ok && val < currentReplicas && currentReplicas > 0) {
+			if !ok || (val != currentReplicas && currentReplicas > 0) {
 				desired.Status.UsedBy[deploymentFullName] = currentReplicas
 			}
 
@@ -165,7 +165,7 @@ func (r *SleepCycleReconciler) ReconcileStatefulSets(
 
 			currentReplicas := int(statefulSet.Status.Replicas)
 			val, ok := desired.Status.UsedBy[statefulSetFullName]
-			if !ok || (ok && val < currentReplicas && currentReplicas > 0) {
+			if !ok || (val != currentReplicas && currentReplicas > 0) {
 				desired.Status.UsedBy[statefulSetFullName] = currentReplicas
 			}
 
@@ -233,7 +233,7 @@ func (r *SleepCycleReconciler) ReconcileHorizontalPodAutoscalers(
 
 			maxReplicas := int(hpa.Spec.MaxReplicas)
 			val, ok := desired.Status.UsedBy[hpaFullName]
-			if !ok || (ok && val < maxReplicas && maxReplicas > 0) {
+			if !ok || (val != maxReplicas && maxReplicas > 0) {
 				desired.Status.UsedBy[hpaFullName] = maxReplicas
 			}
 
