@@ -126,7 +126,8 @@ make run
 
 ![debugging the controller](docs/images/SCR-20221222-hij.png)
 
-**NOTE:** You can also run this in one step by running: `make install run`
+> [!NOTE]
+> You can also run this in one step by running: `make install run`
 
 ### Modifying the API definitions
 If you are editing the API definitions, generate the manifests such as CRs or CRDs using:
@@ -142,14 +143,16 @@ then install the CRDs in the cluster with:
 make install
 ```
 
-**NOTE:** You can debug the controller in the IDE of your choice by hooking to the main.go or you can start
-the controller without debugging with:
+> [!NOTE]
+> You can debug the controller in the IDE of your choice by hooking to the `main.go` or you can start
+> the controller without debugging with:
 
 ```sh
 make run
 ```
 
-**NOTE:** Run `make --help` for more information on all potential `make` targets
+> [!NOTE]
+> Run `make --help` for more information on all potential `make` targets
 
 More information can be found via the [Kubebuilder Documentation](https://book.kubebuilder.io/introduction.html)
 
