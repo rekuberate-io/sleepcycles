@@ -31,12 +31,6 @@ spec:
     - jsonPath: .spec.enabled
       name: Enabled
       type: boolean
-    - jsonPath: .status.lastRunWasSuccessful
-      name: Success
-      type: boolean
-    - jsonPath: .status.lastRunOperation
-      name: Last Op
-      type: string
     name: v1alpha1
     schema:
       openAPIV3Schema:
@@ -80,25 +74,6 @@ spec:
             properties:
               enabled:
                 type: boolean
-              lastRunOperation:
-                type: string
-              lastRunTime:
-                format: date-time
-                type: string
-              lastRunWasSuccessful:
-                type: boolean
-              nextScheduledOp:
-                type: string
-              nextScheduledShutdown:
-                format: date-time
-                type: string
-              nextScheduledWakeUp:
-                format: date-time
-                type: string
-              usedBy:
-                additionalProperties:
-                  type: integer
-                type: object
             type: object
         type: object
     served: true
