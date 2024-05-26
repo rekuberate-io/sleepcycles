@@ -6,6 +6,6 @@ metadata:
 spec:
   shutdown: "*/2 * * * *"
   shutdownTimeZone: "Europe/Athens"
-  wakeup: "*/5 * * * *"
+  wakeup: "*/1 * * * *"
   wakeupTimeZone: "Europe/Dublin"
   enabled: true

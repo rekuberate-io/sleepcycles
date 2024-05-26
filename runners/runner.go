@@ -127,5 +127,6 @@ func scaleDeployment(ctx context.Context, namespace string, target string, repli
 		return err
 	}
 
+	logger.Info("scaled deployment", "namespace", namespace, "deployment", target, "replicas", replicas)
 	return nil
 }

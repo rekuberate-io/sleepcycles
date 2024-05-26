@@ -49,7 +49,7 @@ func (r *SleepCycleReconciler) createCronJob(
 	isShutdownOp bool,
 ) (*batchv1.CronJob, error) {
 
-	successHistoryLimit := int32(0)
+	successHistoryLimit := int32(3)
 	failureHistoryLimit := int32(3)
 	backOffLimit := int32(0)
 
