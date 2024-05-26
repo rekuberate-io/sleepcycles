@@ -108,6 +108,8 @@ var (
 func (r *SleepCycleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	r.logger = log.Log.WithValues("namespace", req.Namespace, "sleepcycle", req.Name)
 
+	r.logger.Info("reconciling sleepcycle")
+
 	provisioned := 0
 	total := 0
 
@@ -118,6 +120,11 @@ func (r *SleepCycleReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		}
 
 		r.logger.Error(err, "unable to fetch sleepcycle")
+		return ctrl.Result{}, err
+	}
+
+	err := r.reconcileRbac(ctx, &original)
+	if err != nil {
 		return ctrl.Result{}, err
 	}
 
@@ -159,7 +166,7 @@ func (r *SleepCycleReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 	original.Status.State = state
 	original.Status.Targets = fmt.Sprintf("%d/%d", provisioned, total)
-	err := r.Status().Update(ctx, &original)
+	err = r.Status().Update(ctx, &original)
 	if err != nil {
 		return ctrl.Result{}, err
 	}

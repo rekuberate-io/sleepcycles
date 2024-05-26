@@ -49,7 +49,8 @@ func (r *SleepCycleReconciler) createCronJob(
 	isShutdownOp bool,
 ) (*batchv1.CronJob, error) {
 
-	historyLimit := int32(1)
+	successHistoryLimit := int32(0)
+	failureHistoryLimit := int32(3)
 	backOffLimit := int32(0)
 
 	schedule := sleepcycle.Spec.Shutdown
@@ -81,8 +82,8 @@ func (r *SleepCycleReconciler) createCronJob(
 			Annotations: annotations,
 		},
 		Spec: batchv1.CronJobSpec{
-			SuccessfulJobsHistoryLimit: &historyLimit,
-			FailedJobsHistoryLimit:     &historyLimit,
+			SuccessfulJobsHistoryLimit: &successHistoryLimit,
+			FailedJobsHistoryLimit:     &failureHistoryLimit,
 			Schedule:                   schedule,
 			TimeZone:                   tz,
 			StartingDeadlineSeconds:    &startingDeadlineSeconds,
@@ -111,11 +112,15 @@ func (r *SleepCycleReconciler) createCronJob(
 													FieldPath: "metadata.namespace",
 												}},
 										},
+										{
+											Name:  "MY_CRONJOB_NAME",
+											Value: cronObjectKey.Name,
+										},
 									},
 								},
 							},
 							RestartPolicy:      v1.RestartPolicyOnFailure,
-							ServiceAccountName: "cronjob-controller",
+							ServiceAccountName: "rekuberate-runner",
 						},
 					},
 					BackoffLimit: &backOffLimit,
