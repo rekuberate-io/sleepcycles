@@ -25,7 +25,6 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv1 "k8s.io/api/autoscaling/v1"
 	batchv1 "k8s.io/api/batch/v1"
-	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
@@ -245,22 +244,4 @@ func (r *SleepCycleReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&corev1alpha1.SleepCycle{}, eventFilters).
 		Complete(r)
-}
-
-func (r *SleepCycleReconciler) RecordEvent(sleepCycle corev1alpha1.SleepCycle, isError bool, namespacedName string, operation SleepCycleOperation, extra ...string) {
-	eventType := corev1.EventTypeNormal
-	reason := "SleepCycleOpSuccess"
-	message := fmt.Sprintf("%s on %s succeeded", operation.String(), namespacedName)
-
-	if isError {
-		eventType = corev1.EventTypeWarning
-		reason = "SleepCycleOpFailure"
-		message = fmt.Sprintf("%s on %s failed", operation.String(), namespacedName)
-	}
-
-	for _, s := range extra {
-		message = message + ". " + s
-	}
-
-	r.Recorder.Event(&sleepCycle, eventType, reason, strings.ToLower(message))
 }

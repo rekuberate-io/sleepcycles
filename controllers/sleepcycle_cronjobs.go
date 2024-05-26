@@ -18,9 +18,11 @@ var (
 )
 
 const (
-	OwnedBy    = "rekuberate.io/owned-by"
-	Target     = "rekuberate.io/target"
-	TargetType = "rekuberate.io/target-type"
+	OwnedBy        = "rekuberate.io/owned-by"
+	Target         = "rekuberate.io/target"
+	TargetType     = "rekuberate.io/target-type"
+	TargetTimezone = "rekuberate.io/target-tz"
+	Replicas       = "rekuberate.io/replicas"
 )
 
 func (r *SleepCycleReconciler) getCronJob(ctx context.Context, objKey client.ObjectKey) (*batchv1.CronJob, error) {
@@ -45,7 +47,10 @@ func (r *SleepCycleReconciler) createCronJob(
 	isShutdownOp bool,
 ) (*batchv1.CronJob, error) {
 
+	historyLimit := int32(1)
 	backOffLimit := int32(0)
+	maxReplicas := "5"
+
 	schedule := sleepcycle.Spec.Shutdown
 	tz := sleepcycle.Spec.ShutdownTimeZone
 	suspend := !sleepcycle.Spec.Enabled
@@ -60,18 +65,25 @@ func (r *SleepCycleReconciler) createCronJob(
 	labels[Target] = fmt.Sprintf("%s", targetMetadata.Name)
 	labels[TargetType] = "Deployment"
 
+	annotations := make(map[string]string)
+	annotations[Replicas] = maxReplicas
+	annotations[TargetTimezone] = *tz
+
 	job := &batchv1.CronJob{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      cronObjectKey.Name,
-			Namespace: cronObjectKey.Namespace,
-			Labels:    labels,
+			Name:        cronObjectKey.Name,
+			Namespace:   cronObjectKey.Namespace,
+			Labels:      labels,
+			Annotations: annotations,
 		},
 		Spec: batchv1.CronJobSpec{
-			Schedule:                schedule,
-			TimeZone:                tz,
-			StartingDeadlineSeconds: &startingDeadlineSeconds,
-			ConcurrencyPolicy:       batchv1.ForbidConcurrent,
-			Suspend:                 &suspend,
+			SuccessfulJobsHistoryLimit: &historyLimit,
+			FailedJobsHistoryLimit:     &historyLimit,
+			Schedule:                   schedule,
+			TimeZone:                   tz,
+			StartingDeadlineSeconds:    &startingDeadlineSeconds,
+			ConcurrencyPolicy:          batchv1.ForbidConcurrent,
+			Suspend:                    &suspend,
 			JobTemplate: batchv1.JobTemplateSpec{
 				Spec: batchv1.JobSpec{
 					Template: v1.PodTemplateSpec{
