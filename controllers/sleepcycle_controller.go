@@ -94,6 +94,7 @@ var (
 //+kubebuilder:rbac:groups=apps,resources=statefulsets,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=autoscaling,resources=horizontalpodautoscalers,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups="",resources=events,verbs=create;patch
+//+kubebuilder:rbac:groups=core,resources=serviceaccounts,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -120,6 +121,14 @@ func (r *SleepCycleReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, err
 	}
 
+	if err := r.Get(ctx, req.NamespacedName, &original); err != nil {
+		if apierrors.IsNotFound(err) {
+			return ctrl.Result{}, nil
+		}
+
+		r.logger.Error(err, "unable to fetch sleepcycle")
+		return ctrl.Result{}, err
+	}
 	reconcilers := []runtimeObjectReconciler{r.ReconcileDeployments}
 	var errors error
 
@@ -141,11 +150,11 @@ func (r *SleepCycleReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		}
 	}
 
-	state := "NotReady"
+	state := "Ready"
 	if provisioned != 0 && provisioned < total {
 		state = "Warning"
-	} else {
-		state = "Ready"
+	} else if provisioned == 0 {
+		state = "NotReady"
 	}
 
 	original.Status.State = state

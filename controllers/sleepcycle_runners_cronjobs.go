@@ -70,7 +70,7 @@ func (r *SleepCycleReconciler) createCronJob(
 	annotations[TargetTimezone] = *tz
 
 	if targetReplicas != 0 {
-		annotations[Replicas] = string(targetReplicas)
+		annotations[Replicas] = fmt.Sprint(targetReplicas)
 	}
 
 	job := &batchv1.CronJob{
@@ -94,12 +94,28 @@ func (r *SleepCycleReconciler) createCronJob(
 						Spec: v1.PodSpec{
 							Containers: []v1.Container{
 								{
-									Name:    cronObjectKey.Name,
-									Image:   "ubuntu:latest",
-									Command: []string{"ls", "-aRil"},
+									Name:  cronObjectKey.Name,
+									Image: "akyriako78/runners-18bcb3a8af7a857e6adc18687b98ef0e",
+									Env: []v1.EnvVar{
+										{
+											Name: "MY_POD_NAME",
+											ValueFrom: &v1.EnvVarSource{
+												FieldRef: &v1.ObjectFieldSelector{
+													FieldPath: "metadata.name",
+												}},
+										},
+										{
+											Name: "MY_POD_NAMESPACE",
+											ValueFrom: &v1.EnvVarSource{
+												FieldRef: &v1.ObjectFieldSelector{
+													FieldPath: "metadata.namespace",
+												}},
+										},
+									},
 								},
 							},
-							RestartPolicy: v1.RestartPolicyOnFailure,
+							RestartPolicy:      v1.RestartPolicyOnFailure,
+							ServiceAccountName: "cronjob-controller",
 						},
 					},
 					BackoffLimit: &backOffLimit,
