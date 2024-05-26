@@ -17,6 +17,12 @@ var (
 	startingDeadlineSeconds int64 = 15
 )
 
+const (
+	OwnedBy    = "rekuberate.io/owned-by"
+	Target     = "rekuberate.io/target"
+	TargetType = "rekuberate.io/target-type"
+)
+
 func (r *SleepCycleReconciler) getCronJob(ctx context.Context, objKey client.ObjectKey) (*batchv1.CronJob, error) {
 	var job batchv1.CronJob
 	if err := r.Get(ctx, objKey, &job); err != nil {
@@ -34,7 +40,8 @@ func (r *SleepCycleReconciler) createCronJob(
 	ctx context.Context,
 	logger logr.Logger,
 	sleepcycle *corev1alpha1.SleepCycle,
-	objKey client.ObjectKey,
+	cronObjectKey client.ObjectKey,
+	targetMetadata ctrl.ObjectMeta,
 	isShutdownOp bool,
 ) (*batchv1.CronJob, error) {
 
@@ -48,10 +55,16 @@ func (r *SleepCycleReconciler) createCronJob(
 		tz = sleepcycle.Spec.WakeupTimeZone
 	}
 
+	labels := make(map[string]string)
+	labels[OwnedBy] = fmt.Sprintf("%s", sleepcycle.Name)
+	labels[Target] = fmt.Sprintf("%s", targetMetadata.Name)
+	labels[TargetType] = "Deployment"
+
 	job := &batchv1.CronJob{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      objKey.Name,
-			Namespace: objKey.Namespace,
+			Name:      cronObjectKey.Name,
+			Namespace: cronObjectKey.Namespace,
+			Labels:    labels,
 		},
 		Spec: batchv1.CronJobSpec{
 			Schedule:                schedule,
@@ -65,7 +78,7 @@ func (r *SleepCycleReconciler) createCronJob(
 						Spec: v1.PodSpec{
 							Containers: []v1.Container{
 								{
-									Name:    objKey.Name,
+									Name:    cronObjectKey.Name,
 									Image:   "ubuntu:latest",
 									Command: []string{"ls", "-aRil"},
 								},
@@ -81,13 +94,13 @@ func (r *SleepCycleReconciler) createCronJob(
 
 	err := ctrl.SetControllerReference(sleepcycle, job, r.Scheme)
 	if err != nil {
-		logger.Error(err, "unable to set controller reference", "cronjob", objKey.Name)
+		logger.Error(err, "unable to set controller reference", "cronjob", cronObjectKey.Name)
 		return nil, err
 	}
 
 	err = r.Create(ctx, job)
 	if err != nil {
-		logger.Error(err, "unable to create internal cronjob", "cronjob", objKey.Name)
+		logger.Error(err, "unable to create internal cronjob", "cronjob", cronObjectKey.Name)
 		return nil, err
 	}
 
@@ -115,24 +128,30 @@ func (r *SleepCycleReconciler) deleteCronJob(ctx context.Context, cronJob *batch
 	return nil
 }
 
-func (r *SleepCycleReconciler) reconcileCronJob(ctx context.Context, logger logr.Logger, sleepcycle *corev1alpha1.SleepCycle, objectMetadata ctrl.ObjectMeta, isShutdownOp bool) error {
+func (r *SleepCycleReconciler) reconcileCronJob(
+	ctx context.Context,
+	logger logr.Logger,
+	sleepcycle *corev1alpha1.SleepCycle,
+	targetMetadata ctrl.ObjectMeta,
+	isShutdownOp bool,
+) error {
 	suffix := "shutdown"
 	if !isShutdownOp {
 		suffix = "wakeup"
 	}
 
-	objectKey := client.ObjectKey{
-		Name:      fmt.Sprintf("%s-%s-%s", sleepcycle.Name, objectMetadata.Name, suffix),
+	cronObjectKey := client.ObjectKey{
+		Name:      fmt.Sprintf("%s-%s-%s", sleepcycle.Name, targetMetadata.Name, suffix),
 		Namespace: sleepcycle.Namespace,
 	}
-	cronjob, err := r.getCronJob(ctx, objectKey)
+	cronjob, err := r.getCronJob(ctx, cronObjectKey)
 	if err != nil {
-		logger.Error(err, "unable to fetch internal cronjob", "cronjob", objectKey.Name)
+		logger.Error(err, "unable to fetch internal cronjob", "cronjob", cronObjectKey.Name)
 		return err
 	}
 
 	if cronjob == nil {
-		_, err := r.createCronJob(ctx, logger, sleepcycle, objectKey, isShutdownOp)
+		_, err := r.createCronJob(ctx, logger, sleepcycle, cronObjectKey, targetMetadata, isShutdownOp)
 		if err != nil {
 			return err
 		}
@@ -157,7 +176,7 @@ func (r *SleepCycleReconciler) reconcileCronJob(ctx context.Context, logger logr
 		if cronjob.Spec.Suspend != &suspend || cronjob.Spec.Schedule != schedule || cronjob.Spec.TimeZone != tz {
 			err := r.updateCronJob(ctx, cronjob, schedule, *tz, suspend)
 			if err != nil {
-				logger.Error(err, "failed to update internal cronjob", "name", objectKey.Name)
+				logger.Error(err, "failed to update internal cronjob", "name", cronObjectKey.Name)
 				return err
 			}
 		}
@@ -166,16 +185,21 @@ func (r *SleepCycleReconciler) reconcileCronJob(ctx context.Context, logger logr
 	return nil
 }
 
-func (r *SleepCycleReconciler) reconcile(ctx context.Context, logger logr.Logger, sleepcycle *corev1alpha1.SleepCycle, objectMetadata ctrl.ObjectMeta) error {
-	hasSleepCycle := r.hasLabel(&objectMetadata, sleepcycle.Name)
+func (r *SleepCycleReconciler) reconcile(
+	ctx context.Context,
+	logger logr.Logger,
+	sleepcycle *corev1alpha1.SleepCycle,
+	targetMetadata ctrl.ObjectMeta,
+) error {
+	hasSleepCycle := r.hasLabel(&targetMetadata, sleepcycle.Name)
 	if hasSleepCycle {
-		err := r.reconcileCronJob(ctx, logger, sleepcycle, objectMetadata, true)
+		err := r.reconcileCronJob(ctx, logger, sleepcycle, targetMetadata, true)
 		if err != nil {
 			return err
 		}
 
 		if sleepcycle.Spec.WakeUp != nil {
-			err := r.reconcileCronJob(ctx, logger, sleepcycle, objectMetadata, false)
+			err := r.reconcileCronJob(ctx, logger, sleepcycle, targetMetadata, false)
 			if err != nil {
 				return err
 			}

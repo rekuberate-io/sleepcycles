@@ -114,7 +114,6 @@ func (r *SleepCycleReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	var original corev1alpha1.SleepCycle
 	if err := r.Get(ctx, req.NamespacedName, &original); err != nil {
 		if apierrors.IsNotFound(err) {
-			//r.logger.Error(err, "🛑️ unable to find SleepCycle")
 			return ctrl.Result{}, nil
 		}
 
