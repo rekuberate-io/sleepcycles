@@ -49,17 +49,25 @@ type SleepCycleSpec struct {
 // SleepCycleStatus defines the observed state of SleepCycle
 type SleepCycleStatus struct {
 	Enabled bool `json:"enabled,omitempty"`
+
+	// +kubebuilder:validation:Enum=NotReady;Warning;Ready
+	// +kubebuilder:default:="NotReady"
+	State string `json:"state"`
+
+	Targets string `json:"targets,omitempty"`
 }
 
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
 
 // SleepCycle is the Schema for the sleepcycles API
+// +kubebuilder:printcolumn:name="Enabled",type=boolean,JSONPath=`.spec.enabled`
+// +kubebuilder:printcolumn:name="State",type=string,JSONPath=`.status.state`
+// +kubebuilder:printcolumn:name="Targets",type=string,JSONPath=`.status.targets`
 // +kubebuilder:printcolumn:name="Shutdown Schedule",type=string,JSONPath=`.spec.shutdown`
 // +kubebuilder:printcolumn:name="Shutdown Timezone",type=string,JSONPath=`.spec.shutdownTimeZone`
 // +kubebuilder:printcolumn:name="Wakeup Schedule",type=string,JSONPath=`.spec.wakeup`
 // +kubebuilder:printcolumn:name="Wakeup Timezone",type=string,JSONPath=`.spec.wakeupTimeZone`
-// +kubebuilder:printcolumn:name="Enabled",type=boolean,JSONPath=`.spec.enabled`
 type SleepCycle struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

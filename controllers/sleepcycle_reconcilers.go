@@ -13,27 +13,38 @@ const (
 	UsedByLabelKey = "(%v) %v/%v"
 )
 
-func (r *SleepCycleReconciler) ReconcileDeployments(ctx context.Context, req ctrl.Request, sleepcycle *corev1alpha1.SleepCycle) error {
+func (r *SleepCycleReconciler) ReconcileDeployments(
+	ctx context.Context,
+	req ctrl.Request,
+	sleepcycle *corev1alpha1.SleepCycle,
+) (int, int, error) {
+	provisioned := 0
+	total := 0
+
 	deploymentList := appsv1.DeploymentList{}
 	if err := r.List(ctx, &deploymentList, &client.ListOptions{Namespace: req.NamespacedName.Namespace}); err != nil {
-		return err
+		return 0, 0, err
 	}
 
 	if len(deploymentList.Items) == 0 {
-		return nil
+		return 0, 0, nil
 	}
 
 	var errors error
+	total = len(deploymentList.Items)
+	provisioned = total
+
 	for _, deployment := range deploymentList.Items {
 		logger := r.logger.WithValues("deployment", deployment.Name)
 
 		err := r.reconcile(ctx, logger, sleepcycle, deployment.ObjectMeta)
 		if err != nil {
+			provisioned -= 1
 			errors = multierror.Append(errors, err)
 		}
 	}
 
-	return errors
+	return provisioned, total, errors
 }
 
 //

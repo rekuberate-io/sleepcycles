@@ -60,7 +60,7 @@ type runtimeObjectReconciler func(
 	ctx context.Context,
 	req ctrl.Request,
 	sleepcycle *corev1alpha1.SleepCycle,
-) error
+) (int, int, error)
 
 type runtimeObjectFinalizer func(
 	ctx context.Context,
@@ -108,6 +108,9 @@ var (
 func (r *SleepCycleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	r.logger = log.Log.WithValues("namespace", req.Namespace, "sleepcycle", req.Name)
 
+	provisioned := 0
+	total := 0
+
 	var original corev1alpha1.SleepCycle
 	if err := r.Get(ctx, req.NamespacedName, &original); err != nil {
 		if apierrors.IsNotFound(err) {
@@ -123,11 +126,35 @@ func (r *SleepCycleReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	var errors error
 
 	for _, reconciler := range reconcilers {
-		err := reconciler(ctx, req, &original)
+		p, t, err := reconciler(ctx, req, &original)
 		if err != nil {
-			//r.logger.Error(err, "reconciliation failure")
 			errors = multierror.Append(errors, err)
 		}
+
+		provisioned += p
+		total += t
+	}
+
+	if errors != nil {
+		if merr, ok := errors.(*multierror.Error); ok {
+			for _, rerr := range merr.Errors {
+				r.logger.Error(rerr, "failed to reconcile")
+			}
+		}
+	}
+
+	state := "NotReady"
+	if provisioned != 0 && provisioned < total {
+		state = "Warning"
+	} else {
+		state = "Ready"
+	}
+
+	original.Status.State = state
+	original.Status.Targets = fmt.Sprintf("%d/%d", provisioned, total)
+	err := r.Status().Update(ctx, &original)
+	if err != nil {
+		return ctrl.Result{}, err
 	}
 
 	return ctrl.Result{RequeueAfter: requeueAfter}, errors
