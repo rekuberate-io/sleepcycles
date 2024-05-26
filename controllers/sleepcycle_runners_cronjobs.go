@@ -20,7 +20,7 @@ var (
 const (
 	OwnedBy        = "rekuberate.io/owned-by"
 	Target         = "rekuberate.io/target"
-	TargetType     = "rekuberate.io/target-type"
+	TargetKind     = "rekuberate.io/target-kind"
 	TargetTimezone = "rekuberate.io/target-tz"
 	Replicas       = "rekuberate.io/replicas"
 )
@@ -43,13 +43,14 @@ func (r *SleepCycleReconciler) createCronJob(
 	logger logr.Logger,
 	sleepcycle *corev1alpha1.SleepCycle,
 	cronObjectKey client.ObjectKey,
-	targetMetadata ctrl.ObjectMeta,
+	targetKind string,
+	targetMeta metav1.ObjectMeta,
+	targetReplicas int32,
 	isShutdownOp bool,
 ) (*batchv1.CronJob, error) {
 
 	historyLimit := int32(1)
 	backOffLimit := int32(0)
-	maxReplicas := "5"
 
 	schedule := sleepcycle.Spec.Shutdown
 	tz := sleepcycle.Spec.ShutdownTimeZone
@@ -62,12 +63,15 @@ func (r *SleepCycleReconciler) createCronJob(
 
 	labels := make(map[string]string)
 	labels[OwnedBy] = fmt.Sprintf("%s", sleepcycle.Name)
-	labels[Target] = fmt.Sprintf("%s", targetMetadata.Name)
-	labels[TargetType] = "Deployment"
+	labels[Target] = fmt.Sprintf("%s", targetMeta.Name)
+	labels[TargetKind] = targetKind
 
 	annotations := make(map[string]string)
-	annotations[Replicas] = maxReplicas
 	annotations[TargetTimezone] = *tz
+
+	if targetReplicas != 0 {
+		annotations[Replicas] = string(targetReplicas)
+	}
 
 	job := &batchv1.CronJob{
 		ObjectMeta: metav1.ObjectMeta{
@@ -119,7 +123,13 @@ func (r *SleepCycleReconciler) createCronJob(
 	return job, nil
 }
 
-func (r *SleepCycleReconciler) updateCronJob(ctx context.Context, cronJob *batchv1.CronJob, schedule string, timezone string, suspend bool) error {
+func (r *SleepCycleReconciler) updateCronJob(
+	ctx context.Context,
+	cronJob *batchv1.CronJob,
+	schedule string,
+	timezone string,
+	suspend bool,
+) error {
 	deepCopy := cronJob.DeepCopy()
 	deepCopy.Spec.Schedule = schedule
 	*deepCopy.Spec.TimeZone = timezone
@@ -144,7 +154,9 @@ func (r *SleepCycleReconciler) reconcileCronJob(
 	ctx context.Context,
 	logger logr.Logger,
 	sleepcycle *corev1alpha1.SleepCycle,
-	targetMetadata ctrl.ObjectMeta,
+	targetKind string,
+	targetMeta metav1.ObjectMeta,
+	targetReplicas int32,
 	isShutdownOp bool,
 ) error {
 	suffix := "shutdown"
@@ -153,7 +165,7 @@ func (r *SleepCycleReconciler) reconcileCronJob(
 	}
 
 	cronObjectKey := client.ObjectKey{
-		Name:      fmt.Sprintf("%s-%s-%s", sleepcycle.Name, targetMetadata.Name, suffix),
+		Name:      fmt.Sprintf("%s-%s-%s", sleepcycle.Name, targetMeta.Name, suffix),
 		Namespace: sleepcycle.Namespace,
 	}
 	cronjob, err := r.getCronJob(ctx, cronObjectKey)
@@ -163,7 +175,7 @@ func (r *SleepCycleReconciler) reconcileCronJob(
 	}
 
 	if cronjob == nil {
-		_, err := r.createCronJob(ctx, logger, sleepcycle, cronObjectKey, targetMetadata, isShutdownOp)
+		_, err := r.createCronJob(ctx, logger, sleepcycle, cronObjectKey, targetKind, targetMeta, targetReplicas, isShutdownOp)
 		if err != nil {
 			return err
 		}
@@ -201,17 +213,19 @@ func (r *SleepCycleReconciler) reconcile(
 	ctx context.Context,
 	logger logr.Logger,
 	sleepcycle *corev1alpha1.SleepCycle,
-	targetMetadata ctrl.ObjectMeta,
+	targetKind string,
+	targetMeta metav1.ObjectMeta,
+	targetReplicas int32,
 ) error {
-	hasSleepCycle := r.hasLabel(&targetMetadata, sleepcycle.Name)
+	hasSleepCycle := r.hasLabel(&targetMeta, sleepcycle.Name)
 	if hasSleepCycle {
-		err := r.reconcileCronJob(ctx, logger, sleepcycle, targetMetadata, true)
+		err := r.reconcileCronJob(ctx, logger, sleepcycle, targetKind, targetMeta, targetReplicas, true)
 		if err != nil {
 			return err
 		}
 
 		if sleepcycle.Spec.WakeUp != nil {
-			err := r.reconcileCronJob(ctx, logger, sleepcycle, targetMetadata, false)
+			err := r.reconcileCronJob(ctx, logger, sleepcycle, targetKind, targetMeta, targetReplicas, false)
 			if err != nil {
 				return err
 			}

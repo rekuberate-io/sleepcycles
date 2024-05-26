@@ -37,7 +37,11 @@ func (r *SleepCycleReconciler) ReconcileDeployments(
 	for _, deployment := range deploymentList.Items {
 		logger := r.logger.WithValues("deployment", deployment.Name)
 
-		err := r.reconcile(ctx, logger, sleepcycle, deployment.ObjectMeta)
+		kind := deployment.TypeMeta.Kind
+		meta := deployment.ObjectMeta
+		replicas := *deployment.Spec.Replicas
+
+		err := r.reconcile(ctx, logger, sleepcycle, kind, meta, replicas)
 		if err != nil {
 			provisioned -= 1
 			errors = multierror.Append(errors, err)
