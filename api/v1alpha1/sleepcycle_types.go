@@ -62,6 +62,10 @@ type SleepCycleSpec struct {
 	// +kubebuilder:validation:ExclusiveMinimum=false
 	// +kubebuilder:validation:ExclusiveMaximum=false
 	FailedJobsHistoryLimit int32 `json:"failedJobsHistoryLimit,omitempty"`
+
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:default:="akyriako78/rekuberate-io-sleepcycles-runners"
+	RunnerImage string `json:"runnerImage,omitempty"`
 }
 
 // SleepCycleStatus defines the observed state of SleepCycle

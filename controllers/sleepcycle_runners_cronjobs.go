@@ -93,7 +93,7 @@ func (r *SleepCycleReconciler) createCronJob(
 							Containers: []v1.Container{
 								{
 									Name:  cronObjectKey.Name,
-									Image: "akyriako78/runners-18bcb3a8af7a857e6adc18687b98ef0e",
+									Image: sleepcycle.Spec.RunnerImage,
 									Env: []v1.EnvVar{
 										{
 											Name: "MY_POD_NAME",

@@ -60,7 +60,7 @@ func main() {
 		os.Exit(78)
 	}
 
-	logger.Info("starting runner", "namespace", ns, "pod", pd, "cronjob", cj)
+	logger.Info("starting runner", "namespace", ns, "cronjob", cj, "pod", pd)
 	cs, err := kubernetes.NewForConfig(config)
 	if err != nil {
 		logger.Error(err, "failed to create clientset")
