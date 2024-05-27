@@ -147,17 +147,24 @@ func (r *SleepCycleReconciler) createCronJob(
 
 func (r *SleepCycleReconciler) updateCronJob(
 	ctx context.Context,
+	logger logr.Logger,
 	cronJob *batchv1.CronJob,
 	schedule string,
 	timezone string,
 	suspend bool,
+	replicas int32,
 ) error {
 	deepCopy := cronJob.DeepCopy()
 	deepCopy.Spec.Schedule = schedule
 	*deepCopy.Spec.TimeZone = timezone
 	*deepCopy.Spec.Suspend = suspend
 
+	if replicas != 0 {
+		deepCopy.Annotations[Replicas] = fmt.Sprint(replicas)
+	}
+
 	if err := r.Update(ctx, deepCopy); err != nil {
+		logger.Error(err, "unable to update runner", "cronjob", cronJob.Name)
 		return err
 	}
 
@@ -219,12 +226,10 @@ func (r *SleepCycleReconciler) reconcileCronJob(
 			tz = sleepcycle.Spec.WakeupTimeZone
 		}
 
-		if cronjob.Spec.Suspend != &suspend || cronjob.Spec.Schedule != schedule || cronjob.Spec.TimeZone != tz {
-			err := r.updateCronJob(ctx, cronjob, schedule, *tz, suspend)
-			if err != nil {
-				logger.Error(err, "failed to update runner", "name", cronObjectKey.Name)
-				return err
-			}
+		err := r.updateCronJob(ctx, logger, cronjob, schedule, *tz, suspend, targetReplicas)
+		if err != nil {
+			logger.Error(err, "failed to update runner", "name", cronObjectKey.Name)
+			return err
 		}
 	}
 
