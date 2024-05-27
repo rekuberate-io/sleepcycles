@@ -202,25 +202,3 @@ To delete the CRDs from the cluster:
 ```sh
 make uninstall
 ```
-
-## Contributing
-Please refer to our [Contributing Guidelines](CONTRIBUTING.md)
-
-### How it works
-
-
-### Test It Out
-1. Install the CRDs into the cluster:
-
-```sh
-make install
-```
-
-2. Run your controller (this will run in the foreground, so switch to a new terminal if you want to leave it running):
-
-```sh
-make run
-```
-
-> [!TIP]
-> You can also run this in one step by running: `make install run`
