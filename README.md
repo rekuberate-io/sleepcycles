@@ -101,7 +101,7 @@ The diagram below describes how `rekuberate.io/sleepcycles` are dealing with sch
 2. The controller, for **every** `SleepCycle` resource within the namespace `app-1`, collects all the resources that have been marked with the label `rekuberate.io/sleepcycle: sleepcycle-app1`.
 3. It provisions, for **every** workload - in this case deployment `deployment-app1` a `CronJob` for the shutdown schedule and optionally a second `CronJob` if a wake-up schedule is provided.
 4. It provisions a `ServiceAccount`, a `Role` and a `RoleBinding` **per namespace**, in order to make possible for runner-pods to update resources' specs.
-5. The `Runner` pods will created automatically from the cron jobs and scale the resources up or down. 
+5. The `Runner` pods will be created automatically by the cron jobs and are responsible for scaling the resources up or down. 
 
 
 ![SCR-20240527-q9y.png](docs/images/SCR-20240527-qei.png)
