@@ -4,8 +4,8 @@ metadata:
   name: sleepcycle-app-2
   namespace: app-2
 spec:
-  shutdown: "*/2 * * * *"
+  shutdown: "1/2 * * * *"
   shutdownTimeZone: "Europe/Athens"
-  wakeup: "*/5 * * * *"
+  wakeup: "*/2 * * * *"
   wakeupTimeZone: "Europe/Dublin"
   enabled: true

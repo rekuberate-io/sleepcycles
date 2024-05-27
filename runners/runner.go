@@ -130,6 +130,22 @@ func run(ns string, cronjob *batchv1.CronJob, target string, kind string, target
 	return serr
 }
 
+func syncReplicas(ctx context.Context, namespace string, cronjob *batchv1.CronJob, currentReplicas int32, targetReplicas int32) error {
+	if currentReplicas != targetReplicas && currentReplicas > 0 {
+		if targetReplicas != 0 {
+			targetReplicas = currentReplicas
+		}
+
+		cronjob.Annotations["rekuberate.io/replicas"] = fmt.Sprint(currentReplicas)
+		_, err := clientSet.BatchV1().CronJobs(namespace).Update(ctx, cronjob, metav1.UpdateOptions{})
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 func scaleDeployment(ctx context.Context, namespace string, cronjob *batchv1.CronJob, target string, targetReplicas int32) error {
 	deployment, err := clientSet.AppsV1().Deployments(namespace).Get(ctx, target, metav1.GetOptions{})
 	if err != nil {
@@ -137,16 +153,9 @@ func scaleDeployment(ctx context.Context, namespace string, cronjob *batchv1.Cro
 	}
 
 	currentReplicas := *deployment.Spec.Replicas
-	if currentReplicas != targetReplicas && currentReplicas > 0 {
-		if targetReplicas != 0 {
-			targetReplicas = currentReplicas
-		}
-
-		cronjob.Annotations["rekuberate.io/replicas"] = fmt.Sprint(currentReplicas)
-		_, err = clientSet.BatchV1().CronJobs(namespace).Update(ctx, cronjob, metav1.UpdateOptions{})
-		if err != nil {
-			return err
-		}
+	err = syncReplicas(ctx, namespace, cronjob, currentReplicas, targetReplicas)
+	if err != nil {
+		return err
 	}
 
 	if currentReplicas != targetReplicas {
@@ -157,6 +166,7 @@ func scaleDeployment(ctx context.Context, namespace string, cronjob *batchv1.Cro
 		}
 
 		logger.Info("scaled deployment", "namespace", namespace, "deployment", target, "replicas", targetReplicas)
+		return nil
 	}
 
 	logger.Info("deployment already in desired state", "namespace", namespace, "deployment", target, "replicas", targetReplicas)
