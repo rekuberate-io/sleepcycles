@@ -72,7 +72,10 @@ or
 3. Deploy the controller to the cluster with the image using a **Helm chart**:
 
 ```sh
-helm install rekuberate-io-sleepcycles config/helm/
+helm repo add sleepcycles https://rekuberate-io.github.io/sleepcycles/
+helm repo update
+
+helm upgrade --install sleepcycles sleepcycles/sleepcycles -n rekuberate-system --create-namespace
 ```
 
 4. Install Instances of Custom Resources:
