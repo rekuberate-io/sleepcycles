@@ -151,7 +151,8 @@ make undeploy
 
 ### Using Helm (from sources)
 
-You can alternatively, it is **highly recommended**, deploy the controller to the cluster using a **Helm chart**:
+If you are on a development environment, you can quickly test & deploy the controller to the cluster
+using a **Helm chart** directly from `config/helm:
 
 ```sh
 helm install rekuberate-io-sleepcycles config/helm/ -n <namespace> --create-namespace
@@ -172,7 +173,9 @@ helm uninstall rekuberate-io-sleepcycles -n <namespace>
 
 ### Using Helm (from repo)
 
-You can alternatively, it is **highly recommended**, deploy the controller to the cluster using a **Helm chart**:
+On the other hand if you are deploying on a production environment, it is **highly recommended** to deploy the 
+controller to the cluster using a **Helm chart** from its repo:
+
 
 ```sh
 helm install rekuberate-io-sleepcycles config/helm/ -n <namespace> --create-namespace
