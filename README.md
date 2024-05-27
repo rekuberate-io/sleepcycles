@@ -95,7 +95,7 @@ spec:
 
 ## How it works
 
-The diagram below describes how `rekuberate.io/sleepcycles` are dealing with scheduling a `Deployment` workload. 
+The diagram below describes how `rekuberate.io/sleepcycles` are dealing with scheduling a `Deployment`: 
 
 1. The `sleepcycle-controller` **watches** periodically, every 1min, all the `SleepCycle` custom resources for changes (in **all** namespaces).
 2. The controller, for **every** `SleepCycle` resource within the namespace `app-1`, collects all the resources that have been marked with the label `rekuberate.io/sleepcycle: sleepcycle-app1`.
