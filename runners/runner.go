@@ -165,7 +165,12 @@ func scaleDeployment(ctx context.Context, namespace string, cronjob *batchv1.Cro
 			return err
 		}
 
-		logger.Info("scaled deployment", "namespace", namespace, "deployment", target, "replicas", targetReplicas)
+		action := "down"
+		if targetReplicas > 0 {
+			action = "up"
+		}
+
+		logger.Info(fmt.Sprintf("scaled %s deployment", action), "namespace", namespace, "deployment", target, "replicas", targetReplicas)
 		return nil
 	}
 
