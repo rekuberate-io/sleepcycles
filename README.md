@@ -185,7 +185,10 @@ controller to the cluster using a **Helm chart** from its repo:
 
 
 ```sh
-helm install rekuberate-io-sleepcycles config/helm/ -n <namespace> --create-namespace
+helm repo add sleepcycles https://rekuberate-io.github.io/sleepcycles/
+helm repo update
+
+helm upgrade --install sleepcycles sleepcycles/sleepcycles -n rekuberate-system --create-namespace
 ```
 
 and then deploy the samples:
