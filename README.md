@@ -1,15 +1,30 @@
 ![rekuberate-sleepcycle-banner.png](docs/images/rekuberate-sleepcycle-banner.png)
 
-Define sleep & wake up cycles for your Kubernetes resources. Automatically schedule to shutdown Deployments, CronJobs, StatefulSets and HorizontalPodAutoscalers that occupy resources in your cluster and wake them up only when you need them, reducing that way the overall power consumption.
+Define sleep & wake up cycles for your Kubernetes resources. Automatically schedule to shutdown **Deployments**, **CronJobs**, 
+**StatefulSets** and **HorizontalPodAutoscalers** that occupy resources in your cluster and wake them up **only** when you need them; 
+in that way you can: 
+
+- _schedule_ resource-hungry workloads (migrations, synchronizations, replications) in hours that do not impact your daily business
+- _depressurize_ your cluster
+- _decrease_ your costs
+- _reduce_ your power consumption
+- _lower_ you carbon footprint
 
 > [!NOTE]
 > You can read more in medium article [rekuberate-io/sleepcycles: an automated way to reclaim your unused Kubernetes resources](https://medium.com/@akyriako/rekuberate-io-sleepcycles-an-automated-way-to-reclaim-your-unused-kubernetes-resources-852e8db313ec).
 
 ## Getting Started
-You’ll need a Kubernetes cluster to run against. You can use [KIND](https://sigs.k8s.io/kind) or [K3D](https://k3d.io) to get a local cluster for testing, or run against a remote cluster.
-**Note:** Your controller will automatically use the current context in your kubeconfig file (i.e. whatever cluster `kubectl cluster-info` shows).
+You’ll need a Kubernetes cluster to run against. You can use [KIND](https://sigs.k8s.io/kind) or [K3D](https://k3d.io) to get a local cluster for testing, 
+or run against a remote cluster. 
 
-Under `config/samples` you will find an example manifest that you can use to test this controller:
+> [!CAUTION]
+> Earliest compatible Kubernetes version is **1.25** 
+
+### Samples
+
+Under `config/samples` you will find a set manifests that you can use to test this sleepcycles on your cluster:
+
+
 
 ```yaml
 apiVersion: core.rekuberate.io/v1alpha1
