@@ -222,7 +222,7 @@ make docker-build docker-push
 #### Build
 
 ```sh
-make docker-build docker-push
+make ko-build-runner
 ```
 
 > [!IMPORTANT]
