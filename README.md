@@ -95,6 +95,8 @@ spec:
 
 ## How it works
 
+![SCR-20240527-q9y.png](docs/images/SCR-20240527-q9y.png)
+
 ## Deploy
 
 ### From sources
