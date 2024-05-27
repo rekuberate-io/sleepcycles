@@ -10,9 +10,6 @@ in that way you can:
 - _reduce_ your power consumption
 - _lower_ you carbon footprint
 
-> [!NOTE]
-> You can read more in medium article [rekuberate-io/sleepcycles: an automated way to reclaim your unused Kubernetes resources](https://medium.com/@akyriako/rekuberate-io-sleepcycles-an-automated-way-to-reclaim-your-unused-kubernetes-resources-852e8db313ec).
-
 ## Getting Started
 You’ll need a Kubernetes cluster to run against. You can use [KIND](https://sigs.k8s.io/kind) or [K3D](https://k3d.io) to get a local cluster for testing, 
 or run against a remote cluster. 
