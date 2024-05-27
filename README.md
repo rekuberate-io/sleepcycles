@@ -90,8 +90,46 @@ spec:
           imagePullPolicy: IfNotPresent
 ```
 
-> [!CAUTION]
+> [!IMPORTANT]
 > Any workload in namespace `kube-system` marked with `rekuberate.io/sleepcycle` will be ignored by the controller **by design**.
+
+## How it works
+
+## Deploy
+
+## Develop
+
+This project aims to follow the Kubernetes [Operator pattern](https://kubernetes.io/docs/concepts/extend-kubernetes/operator/)
+
+It uses [Controllers](https://kubernetes.io/docs/concepts/architecture/controller/)
+which provides a reconcile function responsible for synchronizing resources until the desired state is reached on the cluster.
+
+### Modifying the API definitions
+If you are editing the API definitions, generate the manifests such as CRs or CRDs using:
+
+```sh
+make generate
+make manifests
+```
+
+then install the CRDs in the cluster with:
+
+```sh
+make install
+```
+
+> [!TIP]
+> You can debug the controller in the IDE of your choice by hooking to the `main.go` or you can start
+> the controller without debugging with:
+
+```sh
+make run
+```
+
+> [!TIP]
+> Run `make --help` for more information on all potential `make` targets
+
+More information can be found via the [Kubebuilder Documentation](https://book.kubebuilder.io/introduction.html)
 
 ### Running on the cluster
 
@@ -152,10 +190,7 @@ helm uninstall rekuberate-io-sleepcycles
 Please refer to our [Contributing Guidelines](CONTRIBUTING.md)
 
 ### How it works
-This project aims to follow the Kubernetes [Operator pattern](https://kubernetes.io/docs/concepts/extend-kubernetes/operator/)
 
-It uses [Controllers](https://kubernetes.io/docs/concepts/architecture/controller/) 
-which provides a reconcile function responsible for synchronizing resources untile the desired state is reached on the cluster 
 
 ### Test It Out
 1. Install the CRDs into the cluster:
@@ -175,32 +210,6 @@ make run
 > [!TIP]
 > You can also run this in one step by running: `make install run`
 
-### Modifying the API definitions
-If you are editing the API definitions, generate the manifests such as CRs or CRDs using:
-
-```sh
-make generate
-make manifests
-```
-
-then install the CRDs in the cluster with:
-
-```sh
-make install
-```
-
-> [!TIP]
-> You can debug the controller in the IDE of your choice by hooking to the `main.go` or you can start
-> the controller without debugging with:
-
-```sh
-make run
-```
-
-> [!TIP]
-> Run `make --help` for more information on all potential `make` targets
-
-More information can be found via the [Kubebuilder Documentation](https://book.kubebuilder.io/introduction.html)
 
 ## License
 
