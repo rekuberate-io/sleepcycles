@@ -99,12 +99,12 @@ spec:
 
 ## Develop
 
-This project aims to follow the Kubernetes [Operator pattern](https://kubernetes.io/docs/concepts/extend-kubernetes/operator/)
-
-It uses [Controllers](https://kubernetes.io/docs/concepts/architecture/controller/)
+This project aims to follow the Kubernetes [Operator pattern](https://kubernetes.io/docs/concepts/extend-kubernetes/operator/). It uses [Controllers](https://kubernetes.io/docs/concepts/architecture/controller/)
 which provides a reconcile function responsible for synchronizing resources until the desired state is reached on the cluster.
 
-### Modifying the API definitions
+### Controller
+
+#### Modifying the API definitions
 If you are editing the API definitions, generate the manifests such as CRs or CRDs using:
 
 ```sh
@@ -119,8 +119,8 @@ make install
 ```
 
 > [!TIP]
-> You can debug the controller in the IDE of your choice by hooking to the `main.go` or you can start
-> the controller without debugging with:
+> You can debug the controller in the IDE of your choice by hooking to the `main.go` **or** you can start
+> the controller _without_ debugging with:
 
 ```sh
 make run
@@ -130,6 +130,12 @@ make run
 > Run `make --help` for more information on all potential `make` targets
 
 More information can be found via the [Kubebuilder Documentation](https://book.kubebuilder.io/introduction.html)
+
+#### Build
+
+### Runner
+
+#### Build
 
 ### Running on the cluster
 
@@ -205,25 +211,5 @@ make install
 make run
 ```
 
-![debugging the controller](docs/images/SCR-20221222-hij.png)
-
 > [!TIP]
 > You can also run this in one step by running: `make install run`
-
-
-## License
-
-Copyright 2022.
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-
