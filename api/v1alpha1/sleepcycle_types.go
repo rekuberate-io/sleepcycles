@@ -44,6 +44,24 @@ type SleepCycleSpec struct {
 	// +kubebuilder:validation:default:=true
 	// +kubebuilder:validation:Type=boolean
 	Enabled bool `json:"enabled"`
+
+	// +optional
+	// +kubebuilder:default=1
+	// +kubebuilder:validation:Type=integer
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=3
+	// +kubebuilder:validation:ExclusiveMinimum=false
+	// +kubebuilder:validation:ExclusiveMaximum=false
+	SuccessfulJobsHistoryLimit int32 `json:"successfulJobsHistoryLimit,omitempty"`
+
+	// +optional
+	// +kubebuilder:default=1
+	// +kubebuilder:validation:Type=integer
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=3
+	// +kubebuilder:validation:ExclusiveMinimum=false
+	// +kubebuilder:validation:ExclusiveMaximum=false
+	FailedJobsHistoryLimit int32 `json:"failedJobsHistoryLimit,omitempty"`
 }
 
 // SleepCycleStatus defines the observed state of SleepCycle

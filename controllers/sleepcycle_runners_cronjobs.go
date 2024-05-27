@@ -48,9 +48,6 @@ func (r *SleepCycleReconciler) createCronJob(
 	targetReplicas int32,
 	isShutdownOp bool,
 ) (*batchv1.CronJob, error) {
-
-	successHistoryLimit := int32(3)
-	failureHistoryLimit := int32(3)
 	backOffLimit := int32(0)
 
 	schedule := sleepcycle.Spec.Shutdown
@@ -82,8 +79,8 @@ func (r *SleepCycleReconciler) createCronJob(
 			Annotations: annotations,
 		},
 		Spec: batchv1.CronJobSpec{
-			SuccessfulJobsHistoryLimit: &successHistoryLimit,
-			FailedJobsHistoryLimit:     &failureHistoryLimit,
+			SuccessfulJobsHistoryLimit: &sleepcycle.Spec.SuccessfulJobsHistoryLimit,
+			FailedJobsHistoryLimit:     &sleepcycle.Spec.FailedJobsHistoryLimit,
 			Schedule:                   schedule,
 			TimeZone:                   tz,
 			StartingDeadlineSeconds:    &startingDeadlineSeconds,
