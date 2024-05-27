@@ -70,12 +70,8 @@ type SleepCycleSpec struct {
 
 // SleepCycleStatus defines the observed state of SleepCycle
 type SleepCycleStatus struct {
-	Enabled bool `json:"enabled,omitempty"`
-
-	// +kubebuilder:validation:Enum=NotReady;Warning;Ready
-	// +kubebuilder:default:="NotReady"
-	State string `json:"state"`
-
+	Enabled bool   `json:"enabled,omitempty"`
+	State   string `json:"state,omitempty"`
 	Targets string `json:"targets,omitempty"`
 }
 

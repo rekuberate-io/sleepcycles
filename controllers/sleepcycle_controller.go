@@ -164,14 +164,32 @@ func (r *SleepCycleReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		state = "NotReady"
 	}
 
-	original.Status.State = state
-	original.Status.Targets = fmt.Sprintf("%d/%d", provisioned, total)
-	err = r.Status().Update(ctx, &original)
+	//original.Status.State = state
+	//original.Status.Targets = fmt.Sprintf("%d/%d", provisioned, total)
+	//err = r.Status().Update(ctx, &original)
+	//if err != nil {
+	//	return ctrl.Result{}, err
+	//}
+	err = r.UpdateStatus(ctx, &original, state, []int{provisioned, total})
 	if err != nil {
 		return ctrl.Result{}, err
 	}
 
 	return ctrl.Result{RequeueAfter: requeueAfter}, errors
+}
+
+func (r *SleepCycleReconciler) UpdateStatus(ctx context.Context, sleepcycle *corev1alpha1.SleepCycle, state string, targets []int) error {
+	patch := client.MergeFrom(sleepcycle.DeepCopy())
+	sleepcycle.Status.State = state
+	sleepcycle.Status.Targets = fmt.Sprintf("%d/%d", targets[0], targets[1])
+
+	err := r.Status().Patch(ctx, sleepcycle, patch)
+	if err != nil {
+		r.logger.Error(err, "unable to patch sleepcycle status")
+		return err
+	}
+
+	return nil
 }
 
 //if !original.Spec.Enabled {

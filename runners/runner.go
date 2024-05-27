@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"github.com/go-logr/logr"
+	"github.com/pkg/errors"
 	"go.uber.org/zap/zapcore"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
@@ -45,26 +46,26 @@ func main() {
 	pd, ok := os.LookupEnv(podEnvVar)
 	if !ok {
 		logger.Error(fmt.Errorf(envVarErr, podEnvVar), "failed to load environment variable")
-		os.Exit(78)
+		//os.Exit(78)
 	}
 
 	ns, ok := os.LookupEnv(namespaceEnvVar)
 	if !ok {
 		logger.Error(fmt.Errorf(envVarErr, namespaceEnvVar), "failed to load environment variable")
-		os.Exit(78)
+		//os.Exit(78)
 	}
 
 	cj, ok := os.LookupEnv(cronjobEnvVar)
 	if !ok {
 		logger.Error(fmt.Errorf(envVarErr, cronjobEnvVar), "failed to load environment variable")
-		os.Exit(78)
+		//os.Exit(78)
 	}
 
 	logger.Info("starting runner", "namespace", ns, "cronjob", cj, "pod", pd)
 	cs, err := kubernetes.NewForConfig(config)
 	if err != nil {
 		logger.Error(err, "failed to create clientset")
-		os.Exit(1)
+		//os.Exit(1)
 	}
 	clientSet = cs
 
@@ -82,37 +83,51 @@ func main() {
 	replicas, err := strconv.ParseInt(cronjob.Annotations["rekuberate.io/replicas"], 10, 32)
 	if err != nil {
 		logger.Error(err, "failed to get rekuberate.io/replicas value")
-		os.Exit(1)
+		//os.Exit(1)
 	}
 
 	target := cronjob.Labels["rekuberate.io/target"]
 	kind := cronjob.Labels["rekuberate.io/target-kind"]
+
+	if err == nil {
+		err := run(ns, target, kind, replicas, isShutdownOp)
+		if err != nil {
+			logger.Error(err, "runner failed", "target", target, "kind", kind)
+		}
+	}
+}
+
+func run(ns string, target string, kind string, replicas int64, shutdown bool) error {
+	smsg := "scaling failed"
+	var serr error
+
 	switch kind {
 	case "Deployment":
-		if isShutdownOp {
+		if shutdown {
 			replicas = 0
 		}
 		err := scaleDeployment(ctx, ns, target, int32(replicas))
 		if err != nil {
-			logger.Error(err, "scaling failed", "kind", kind, "target", target)
-			os.Exit(1)
+			serr = errors.Wrap(err, smsg)
 		}
 	case "StatefulSet":
-		if isShutdownOp {
+		if shutdown {
 			replicas = 0
 		}
 	case "CronJob":
-		if isShutdownOp {
+		if shutdown {
 			replicas = 0
 		}
 	case "HorizontalPodAutoscaler":
-		if isShutdownOp {
+		if shutdown {
 			replicas = 1
 		}
 	default:
-		logger.Error(err, "not supported kind", "kind", kind)
-		os.Exit(1)
+		err := fmt.Errorf("not supported kind: %s", kind)
+		serr = errors.Wrap(err, smsg)
 	}
+
+	return serr
 }
 
 func scaleDeployment(ctx context.Context, namespace string, target string, replicas int32) error {

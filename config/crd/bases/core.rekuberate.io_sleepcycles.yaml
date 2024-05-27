@@ -96,16 +96,9 @@ spec:
               enabled:
                 type: boolean
               state:
-                default: NotReady
-                enum:
-                - NotReady
-                - Warning
-                - Ready
                 type: string
               targets:
                 type: string
-            required:
-            - state
             type: object
         type: object
     served: true

@@ -11,6 +11,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"strconv"
 )
 
 var (
@@ -48,6 +49,8 @@ func (r *SleepCycleReconciler) createCronJob(
 	targetReplicas int32,
 	isShutdownOp bool,
 ) (*batchv1.CronJob, error) {
+
+	logger.Info("creating runner", "cronjob", cronObjectKey)
 	backOffLimit := int32(0)
 
 	schedule := sleepcycle.Spec.Shutdown
@@ -66,9 +69,10 @@ func (r *SleepCycleReconciler) createCronJob(
 
 	annotations := make(map[string]string)
 	annotations[TargetTimezone] = *tz
+	annotations[Replicas] = fmt.Sprint(targetReplicas)
 
-	if targetReplicas != 0 {
-		annotations[Replicas] = fmt.Sprint(targetReplicas)
+	if targetReplicas == 0 {
+		annotations[Replicas] = strconv.FormatInt(1, 10)
 	}
 
 	job := &batchv1.CronJob{
@@ -128,13 +132,13 @@ func (r *SleepCycleReconciler) createCronJob(
 
 	err := ctrl.SetControllerReference(sleepcycle, job, r.Scheme)
 	if err != nil {
-		logger.Error(err, "unable to set controller reference", "cronjob", cronObjectKey.Name)
+		logger.Error(err, "unable to set controller reference for runner", "cronjob", cronObjectKey.Name)
 		return nil, err
 	}
 
 	err = r.Create(ctx, job)
 	if err != nil {
-		logger.Error(err, "unable to create internal cronjob", "cronjob", cronObjectKey.Name)
+		logger.Error(err, "unable to create runner", "cronjob", cronObjectKey.Name)
 		return nil, err
 	}
 
@@ -188,7 +192,7 @@ func (r *SleepCycleReconciler) reconcileCronJob(
 	}
 	cronjob, err := r.getCronJob(ctx, cronObjectKey)
 	if err != nil {
-		logger.Error(err, "unable to fetch internal cronjob", "cronjob", cronObjectKey.Name)
+		logger.Error(err, "unable to fetch runner", "cronjob", cronObjectKey.Name)
 		return err
 	}
 
@@ -218,7 +222,7 @@ func (r *SleepCycleReconciler) reconcileCronJob(
 		if cronjob.Spec.Suspend != &suspend || cronjob.Spec.Schedule != schedule || cronjob.Spec.TimeZone != tz {
 			err := r.updateCronJob(ctx, cronjob, schedule, *tz, suspend)
 			if err != nil {
-				logger.Error(err, "failed to update internal cronjob", "name", cronObjectKey.Name)
+				logger.Error(err, "failed to update runner", "name", cronObjectKey.Name)
 				return err
 			}
 		}
