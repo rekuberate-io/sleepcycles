@@ -7,6 +7,7 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
 	"go.uber.org/zap/zapcore"
+	batchv1 "k8s.io/api/batch/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -83,44 +84,43 @@ func main() {
 	replicas, err := strconv.ParseInt(cronjob.Annotations["rekuberate.io/replicas"], 10, 32)
 	if err != nil {
 		logger.Error(err, "failed to get rekuberate.io/replicas value")
-		//os.Exit(1)
 	}
 
 	target := cronjob.Labels["rekuberate.io/target"]
 	kind := cronjob.Labels["rekuberate.io/target-kind"]
 
 	if err == nil {
-		err := run(ns, target, kind, replicas, isShutdownOp)
+		err := run(ns, cronjob, target, kind, replicas, isShutdownOp)
 		if err != nil {
 			logger.Error(err, "runner failed", "target", target, "kind", kind)
 		}
 	}
 }
 
-func run(ns string, target string, kind string, replicas int64, shutdown bool) error {
+func run(ns string, cronjob *batchv1.CronJob, target string, kind string, targetReplicas int64, shutdown bool) error {
 	smsg := "scaling failed"
 	var serr error
 
 	switch kind {
 	case "Deployment":
 		if shutdown {
-			replicas = 0
+			targetReplicas = 0
 		}
-		err := scaleDeployment(ctx, ns, target, int32(replicas))
+		err := scaleDeployment(ctx, ns, cronjob, target, int32(targetReplicas))
 		if err != nil {
 			serr = errors.Wrap(err, smsg)
 		}
 	case "StatefulSet":
 		if shutdown {
-			replicas = 0
+			targetReplicas = 0
 		}
 	case "CronJob":
 		if shutdown {
-			replicas = 0
+			targetReplicas = 0
 		}
 	case "HorizontalPodAutoscaler":
 		if shutdown {
-			replicas = 1
+			targetReplicas = 1
 		}
 	default:
 		err := fmt.Errorf("not supported kind: %s", kind)
@@ -130,18 +130,36 @@ func run(ns string, target string, kind string, replicas int64, shutdown bool) e
 	return serr
 }
 
-func scaleDeployment(ctx context.Context, namespace string, target string, replicas int32) error {
+func scaleDeployment(ctx context.Context, namespace string, cronjob *batchv1.CronJob, target string, targetReplicas int32) error {
 	deployment, err := clientSet.AppsV1().Deployments(namespace).Get(ctx, target, metav1.GetOptions{})
 	if err != nil {
 		return err
 	}
 
-	deployment.Spec.Replicas = &replicas
-	_, err = clientSet.AppsV1().Deployments(namespace).Update(ctx, deployment, metav1.UpdateOptions{})
-	if err != nil {
-		return err
+	currentReplicas := *deployment.Spec.Replicas
+	if currentReplicas != targetReplicas && currentReplicas > 0 {
+		if targetReplicas != 0 {
+			targetReplicas = currentReplicas
+		}
+
+		cronjob.Annotations["rekuberate.io/replicas"] = fmt.Sprint(currentReplicas)
+		_, err = clientSet.BatchV1().CronJobs(namespace).Update(ctx, cronjob, metav1.UpdateOptions{})
+		if err != nil {
+			return err
+		}
 	}
 
-	logger.Info("scaled deployment", "namespace", namespace, "deployment", target, "replicas", replicas)
+	if currentReplicas != targetReplicas {
+		deployment.Spec.Replicas = &targetReplicas
+		_, err = clientSet.AppsV1().Deployments(namespace).Update(ctx, deployment, metav1.UpdateOptions{})
+		if err != nil {
+			return err
+		}
+
+		logger.Info("scaled deployment", "namespace", namespace, "deployment", target, "replicas", targetReplicas)
+	}
+
+	logger.Info("deployment already in desired state", "namespace", namespace, "deployment", target, "replicas", targetReplicas)
+
 	return nil
 }
