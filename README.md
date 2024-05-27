@@ -97,6 +97,36 @@ spec:
 
 ## Deploy
 
+### From sources
+
+1. Build and push your image to the location specified by `IMG` in `Makefile`:
+
+```shell
+# Image URL to use all building/pushing image targets
+IMG_TAG ?= $(shell git rev-parse --short HEAD)
+IMG_NAME ?= rekuberate-io-sleepcycles
+DOCKER_HUB_NAME ?= $(shell docker info | sed '/Username:/!d;s/.* //')
+IMG ?= $(DOCKER_HUB_NAME)/$(IMG_NAME):$(IMG_TAG)
+RUNNERS_IMG_NAME ?= rekuberate-io-sleepcycles-runners
+KO_DOCKER_REPO ?= $(DOCKER_HUB_NAME)/$(RUNNERS_IMG_NAME)
+```
+
+```sh
+make docker-build docker-push
+```
+
+2. Deploy the controller to the cluster using the image defined in `IMG`:
+
+```sh
+make deploy
+```
+
+and then install the samples:
+
+```sh
+kubectl apply -f config/samples
+```
+
 ## Develop
 
 This project aims to follow the Kubernetes [Operator pattern](https://kubernetes.io/docs/concepts/extend-kubernetes/operator/). It uses [Controllers](https://kubernetes.io/docs/concepts/architecture/controller/)
@@ -139,25 +169,6 @@ More information can be found via the [Kubebuilder Documentation](https://book.k
 
 ### Running on the cluster
 
-1. Build and push your image to the location specified by `IMG` in `Makefile`:
-
-```shell
-# Image URL to use all building/pushing image targets
-IMG_TAG ?= $(shell git rev-parse --short HEAD)
-IMG_NAME ?= rekuberate-io-sleepcycles
-DOCKER_HUB_NAME ?= $(shell docker info | sed '/Username:/!d;s/.* //')
-IMG ?= $(DOCKER_HUB_NAME)/$(IMG_NAME):$(IMG_TAG)
-```
-
-```sh
-make docker-build docker-push
-```
-
-2. Deploy the controller to the cluster with the image using `IMG`:
-
-```sh
-make deploy
-```
 
 or
 
