@@ -3,6 +3,16 @@ entries:
   sleepcycles:
   - apiVersion: v2
     appVersion: 0.1.2
+    created: "2024-05-27T21:31:30.102082727Z"
+    description: A Helm chart for Kubernetes
+    digest: d0e84de424e661028facc9ac6e4b87af3e51cb9ddcae1021a1b662896797e9eb
+    name: sleepcycles
+    type: application
+    urls:
+    - https://github.com/rekuberate-io/sleepcycles/releases/download/sleepcycles-0.1.2/sleepcycles-0.1.2.tgz
+    version: 0.1.2
+  - apiVersion: v2
+    appVersion: 0.1.2
     created: "2024-05-27T21:28:45.629649133Z"
     description: A Helm chart for Kubernetes
     digest: b5a164c482375dcb2d6ec7b1879da7d107ef7af42cb6c1bbaeb0815fd49fbfef
@@ -11,4 +21,4 @@ entries:
     urls:
     - https://github.com/rekuberate-io/sleepcycles/releases/download/sleepcycles-0.1.0/sleepcycles-0.1.0.tgz
     version: 0.1.0
-generated: "2024-05-27T21:28:45.629659372Z"
+generated: "2024-05-27T21:31:30.102094198Z"
