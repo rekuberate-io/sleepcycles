@@ -192,9 +192,25 @@ More information can be found via the [Kubebuilder Documentation](https://book.k
 
 #### Build
 
+You always need to build a new docker container and push it to your repository:
+
+```sh
+make docker-build docker-push
+```
+
+> [!IMPORTANT]
+> In this case you will need to adjust your Helm chart values to use your repository and container image.
+
 ### Runner
 
 #### Build
+
+```sh
+make docker-build docker-push
+```
+
+> [!IMPORTANT]
+> In this case you will need to adjust the `runnerImage` of your `SleepCycle` manifest to use your own Runner image.
 
 ### Uninstall CRDs
 To delete the CRDs from the cluster:
