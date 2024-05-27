@@ -109,8 +109,8 @@ The diagram below describes how `rekuberate.io/sleepcycles` are dealing with sch
 > [!NOTE]
 > In the diagram it was depicted how `rekuberate.io/sleepcycles` scales `Deployment`. The same steps count for a
 > `StatefulSet` and a `HorizontalPodAutoscaler`. There are two exception though:
-> - A horizontal pod autoscaler will scale down to `1` replica and not to `0` as deployments and stateful sets.
-> - A `CronJob` has no replicas to scale up or down, it is going to be enabled or suspended respectively.
+> - a `HorizontalPodAutoscaler` will scale down to `1` replica and not to `0` as for a `Deployment` or a `Statefulset`.
+> - a `CronJob` has no replicas to scale up or down, it is going to be enabled or suspended respectively.
 
 ## Deploy
 
