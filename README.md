@@ -149,7 +149,28 @@ kubectl apply -f config/samples
 make undeploy
 ```
 
-### Using Helm
+### Using Helm (from sources)
+
+You can alternatively, it is **highly recommended**, deploy the controller to the cluster using a **Helm chart**:
+
+```sh
+helm install rekuberate-io-sleepcycles config/helm/ -n <namespace> --create-namespace
+```
+
+and then deploy the samples:
+
+```sh
+kubectl create namespace app-1
+kubectl create namespace app-2
+kubectl apply -f config/samples
+```
+#### Uninstall
+
+```shell
+helm uninstall rekuberate-io-sleepcycles -n <namespace>
+```
+
+### Using Helm (from repo)
 
 You can alternatively, it is **highly recommended**, deploy the controller to the cluster using a **Helm chart**:
 
