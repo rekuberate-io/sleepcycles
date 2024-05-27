@@ -24,41 +24,74 @@ or run against a remote cluster.
 
 Under `config/samples` you will find a set manifests that you can use to test this sleepcycles on your cluster:
 
+#### SleepCycles
 
+* _core_v1alpha1_sleepcycle_app_x.yaml_, manifests to deploy 2 `SleepCycle` resources in namespaces `app-1` and `app-2`
 
 ```yaml
 apiVersion: core.rekuberate.io/v1alpha1
 kind: SleepCycle
 metadata:
-  name: sleepcycle-sample
+  name: sleepcycle-app-1
+  namespace: app-1
 spec:
-  shutdown: "0 20 * * *"
+  shutdown: "1/2 * * * *"
   shutdownTimeZone: "Europe/Athens"
-  wakeup: "30 7 * * 1-5"
+  wakeup: "*/2 * * * *"
   wakeupTimeZone: "Europe/Dublin"
   enabled: true
 ```
 
-You need to provide to every `SleepCycle` the `shutdown` (mandatory) and `wakeup` (non-mandatory) policies via Cron expressions (**do not include seconds or timezone**). 
-Additionally you can provide schedules on different timezones via the (non-mandatory) fields `shutdownTimeZone` and  `wakeupTimeZone`. If they're not provided they default to **UTC**.
-The example above will set a `SleepCycle` schedule shutting down  your workloads **every day at 20:00 Athens local time** and waking them up **every weekday at 07:30 Dublin local time**.
+Every `SleepCycle` has the following **mandatory** properties:
 
-`SleepCycle` is a **Namespaced Custom Resource**, and the controller will monitor all the resources in the Namespace you installed the
-`SleepCycle` manifest and they are marked with a `Label` that has as key `rekuberate.io/sleepcycle:` and as value the `name` of the manifest you created:
+- `shutdown`: cron expression for your shutdown schedule
+- `enabled`: whether this sleepcycle policy is enabled
+
+and the following **non-mandatory** properties:
+
+- `shutdownTimeZone`: the timezone for your shutdown schedule, defaults to `UTC`
+- `wakeup`: cron expression for your wake-up schedule
+- `wakeupTimeZone`: the timezone for your wake-up schedule, defaults to `UTC`
+- `successfulJobsHistoryLimit`: how many _completed_ CronJob Runner Pods to retain for debugging reasons, defaults to `1`
+- `failedJobsHistoryLimit`: how many _failed_ CronJob Runner Pods to retain for debugging reasons, defaults to `1`
+- `runnerImage`: the image to use when spawn CronJob Runner pods, defaults to `akyriako78/rekuberate-io-sleepcycles-runners`
+
+#### Demo workloads
+
+* _whoami-app-1_x-deployment.yaml_, manifests to deploy 2 `Deployment` that provisions _traefik/whoami_ in namespace `app-1` 
+* _whoami-app-2_x-deployment.yaml_, manifests to deploy a `Deployment`that provisions _traefik/whoami_ in namespace `app-2`
+
+`SleepCycle` is a namespace-scoped custom resource; the controller will monitor all the resources in that namespace that
+are marked with a `Label` that has as key `rekuberate.io/sleepcycle:` and as value the `name` of the manifest you created:
 
 ```yaml
 apiVersion: apps/v1
 kind: Deployment
 metadata:
+  name: app-2
+  namespace: app-2
   labels:
-    app: nginx-demo
-    rekuberate.io/sleepcycle: sleepcycle-sample
-  name: nginx-demo
-  namespace: default
+    app: app-2
+    rekuberate.io/sleepcycle: sleepcycle-app-2
 spec:
-  ...
-  ...
+  replicas: 9
+  selector:
+    matchLabels:
+      app: app-2
+  template:
+    metadata:
+      name: app-2
+      labels:
+        app: app-2
+    spec:
+      containers:
+        - name: app-2
+          image: traefik/whoami
+          imagePullPolicy: IfNotPresent
 ```
+
+> [!CAUTION]
+> Any workload in namespace `kube-system` marked with `rekuberate.io/sleepcycle` will be ignored by the controller **by design**.
 
 ### Running on the cluster
 
