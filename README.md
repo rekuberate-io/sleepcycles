@@ -39,6 +39,10 @@ spec:
   enabled: true
 ```
 
+> [!NOTE]
+> The cron expressions of the samples are tailored so you perform a quick demo. The `shutdown` expression schedules
+> the deployment to scale down on _odd_ minutes and the `wakeup` schedule to scale up on _even_ minutes.
+
 Every `SleepCycle` has the following **mandatory** properties:
 
 - `shutdown`: cron expression for your shutdown schedule
@@ -52,6 +56,9 @@ and the following **non-mandatory** properties:
 - `successfulJobsHistoryLimit`: how many _completed_ CronJob Runner Pods to retain for debugging reasons, defaults to `1`
 - `failedJobsHistoryLimit`: how many _failed_ CronJob Runner Pods to retain for debugging reasons, defaults to `1`
 - `runnerImage`: the image to use when spawn CronJob Runner pods, defaults to `akyriako78/rekuberate-io-sleepcycles-runners`
+
+> [!IMPORTANT]
+> DO **NOT** ADD **seconds** or **timezone** information to you cron expressions.
 
 #### Demo workloads
 
@@ -152,7 +159,7 @@ make undeploy
 ### Using Helm (from sources)
 
 If you are on a development environment, you can quickly test & deploy the controller to the cluster
-using a **Helm chart** directly from `config/helm:
+using a **Helm chart** directly from `config/helm`:
 
 ```sh
 helm install rekuberate-io-sleepcycles config/helm/ -n <namespace> --create-namespace
