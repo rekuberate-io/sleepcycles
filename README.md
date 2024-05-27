@@ -121,10 +121,39 @@ make docker-build docker-push
 make deploy
 ```
 
-and then install the samples:
+and then deploy the samples:
 
 ```sh
+kubectl create namespace app-1
+kubectl create namespace app-2
 kubectl apply -f config/samples
+```
+
+#### Uninstall
+
+```sh
+make undeploy
+```
+
+### Using Helm
+
+You can alternatively, it is **highly recommended**, deploy the controller to the cluster using a **Helm chart**:
+
+```sh
+helm install rekuberate-io-sleepcycles config/helm/ -n <namespace> --create-namespace
+```
+
+and then deploy the samples:
+
+```sh
+kubectl create namespace app-1
+kubectl create namespace app-2
+kubectl apply -f config/samples
+```
+#### Uninstall
+
+```shell
+helm uninstall rekuberate-io-sleepcycles -n <namespace>
 ```
 
 ## Develop
@@ -167,40 +196,11 @@ More information can be found via the [Kubebuilder Documentation](https://book.k
 
 #### Build
 
-### Running on the cluster
-
-
-or
-
-3. Deploy the controller to the cluster with the image using a **Helm chart**:
-
-```sh
-helm install rekuberate-io-sleepcycles config/helm/
-```
-
-4. Install Instances of Custom Resources:
-
-```sh
-kubectl apply -f config/samples/
-```
-
 ### Uninstall CRDs
 To delete the CRDs from the cluster:
 
 ```sh
 make uninstall
-```
-
-### Undeploy controller
-UnDeploy the controller to the cluster:
-
-```sh
-make undeploy
-```
-or if you have installed via Helm:
-
-```shell
-helm uninstall rekuberate-io-sleepcycles
 ```
 
 ## Contributing
