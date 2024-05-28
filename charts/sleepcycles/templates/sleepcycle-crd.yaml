@@ -1,0 +1,113 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: sleepcycles.core.rekuberate.io
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.9.2
+  labels:
+  {{- include "sleepcycles.labels" . | nindent 4 }}
+spec:
+  group: core.rekuberate.io
+  names:
+    kind: SleepCycle
+    listKind: SleepCycleList
+    plural: sleepcycles
+    singular: sleepcycle
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.enabled
+      name: Enabled
+      type: boolean
+    - jsonPath: .status.state
+      name: State
+      type: string
+    - jsonPath: .status.targets
+      name: Targets
+      type: string
+    - jsonPath: .spec.shutdown
+      name: Shutdown Schedule
+      type: string
+    - jsonPath: .spec.shutdownTimeZone
+      name: Shutdown Timezone
+      type: string
+    - jsonPath: .spec.wakeup
+      name: Wakeup Schedule
+      type: string
+    - jsonPath: .spec.wakeupTimeZone
+      name: Wakeup Timezone
+      type: string
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: SleepCycle is the Schema for the sleepcycles API
+        properties:
+          apiVersion:
+            description: 'APIVersion defines the versioned schema of this representation
+              of an object. Servers should convert recognized schemas to the latest
+              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            type: string
+          kind:
+            description: 'Kind is a string value representing the REST resource this
+              object represents. Servers may infer this from the endpoint the client
+              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: SleepCycleSpec defines the desired state of SleepCycle
+            properties:
+              enabled:
+                type: boolean
+              failedJobsHistoryLimit:
+                default: 1
+                format: int32
+                maximum: 3
+                minimum: 1
+                type: integer
+              runnerImage:
+                default: akyriako78/rekuberate-io-sleepcycles-runners
+                type: string
+              shutdown:
+                pattern: (^((\*\/)?([0-5]?[0-9])((\,|\-|\/)([0-5]?[0-9]))*|\*)\s+((\*\/)?((2[0-3]|1[0-9]|[0-9]|00))((\,|\-|\/)(2[0-3]|1[0-9]|[0-9]|00))*|\*)\s+((\*\/)?([1-9]|[12][0-9]|3[01])((\,|\-|\/)([1-9]|[12][0-9]|3[01]))*|\*)\s+((\*\/)?([1-9]|1[0-2])((\,|\-|\/)([1-9]|1[0-2]))*|\*|(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|des))\s+((\*\/)?[0-6]((\,|\-|\/)[0-6])*|\*|00|(sun|mon|tue|wed|thu|fri|sat))\s*$)|@(annually|yearly|monthly|weekly|daily|hourly|reboot)
+                type: string
+              shutdownTimeZone:
+                default: UTC
+                type: string
+              successfulJobsHistoryLimit:
+                default: 1
+                format: int32
+                maximum: 3
+                minimum: 1
+                type: integer
+              wakeup:
+                pattern: (^((\*\/)?([0-5]?[0-9])((\,|\-|\/)([0-5]?[0-9]))*|\*)\s+((\*\/)?((2[0-3]|1[0-9]|[0-9]|00))((\,|\-|\/)(2[0-3]|1[0-9]|[0-9]|00))*|\*)\s+((\*\/)?([1-9]|[12][0-9]|3[01])((\,|\-|\/)([1-9]|[12][0-9]|3[01]))*|\*)\s+((\*\/)?([1-9]|1[0-2])((\,|\-|\/)([1-9]|1[0-2]))*|\*|(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|des))\s+((\*\/)?[0-6]((\,|\-|\/)[0-6])*|\*|00|(sun|mon|tue|wed|thu|fri|sat))\s*$)|@(annually|yearly|monthly|weekly|daily|hourly|reboot)
+                type: string
+              wakeupTimeZone:
+                default: UTC
+                type: string
+            required:
+            - enabled
+            - shutdown
+            type: object
+          status:
+            description: SleepCycleStatus defines the observed state of SleepCycle
+            properties:
+              enabled:
+                type: boolean
+              state:
+                type: string
+              targets:
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: []
+  storedVersions: []
