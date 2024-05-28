@@ -20,32 +20,31 @@ import (
 	"context"
 	"fmt"
 	"github.com/go-logr/logr"
-	"k8s.io/client-go/tools/record"
-	"sigs.k8s.io/controller-runtime/pkg/builder"
-	"sigs.k8s.io/controller-runtime/pkg/event"
-	"sigs.k8s.io/controller-runtime/pkg/predicate"
-	"strings"
-	"time"
-
+	"github.com/hashicorp/go-multierror"
 	corev1alpha1 "github.com/rekuberate-io/sleepcycles/api/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv1 "k8s.io/api/autoscaling/v1"
 	batchv1 "k8s.io/api/batch/v1"
-	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"strings"
+	"time"
 )
 
 const (
-	SleepCycleLabel                      = "rekuberate.io/sleepcycle"
-	SleepCycleFinalizer                  = "sleepcycle.core.rekuberate.io/finalizer"
-	TimeWindowToleranceInSeconds  int    = 30
-	SleepCycleStatusUpdateFailure string = "failed to update SleepCycle Status"
-	SleepCycleFinalizerFailure    string = "finalizer failed"
+	SleepCycleLabel                             = "rekuberate.io/sleepcycle"
+	SleepCycleFinalizer                         = "sleepcycle.core.rekuberate.io/finalizer"
+	TimeWindowToleranceInSeconds  int           = 30
+	requeueAfter                  time.Duration = 60 * time.Second
+	SleepCycleStatusUpdateFailure string        = "failed to update status"
+	SleepCycleFinalizerFailure    string        = "finalizer failed"
 )
 
 // SleepCycleReconciler reconciles a SleepCycle object
@@ -59,10 +58,8 @@ type SleepCycleReconciler struct {
 type runtimeObjectReconciler func(
 	ctx context.Context,
 	req ctrl.Request,
-	original *corev1alpha1.SleepCycle,
-	desired *corev1alpha1.SleepCycle,
-	op SleepCycleOperation,
-) (ctrl.Result, error)
+	sleepcycle *corev1alpha1.SleepCycle,
+) (int, int, error)
 
 type runtimeObjectFinalizer func(
 	ctx context.Context,
@@ -97,6 +94,7 @@ var (
 //+kubebuilder:rbac:groups=apps,resources=statefulsets,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=autoscaling,resources=horizontalpodautoscalers,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups="",resources=events,verbs=create;patch
+//+kubebuilder:rbac:groups=core,resources=serviceaccounts,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -110,127 +108,107 @@ var (
 func (r *SleepCycleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	r.logger = log.Log.WithValues("namespace", req.Namespace, "sleepcycle", req.Name)
 
-	var original corev1alpha1.SleepCycle
-	if err := r.Get(ctx, req.NamespacedName, &original); err != nil {
-		if apierrors.IsNotFound(err) {
-			//r.logger.Error(err, "🛑️ unable to find SleepCycle")
-			return ctrl.Result{}, nil
-		}
+	r.logger.Info("reconciling sleepcycle")
 
-		r.logger.Error(err, "🛑 unable to fetch SleepCycle")
-		return ctrl.Result{}, err
-	}
-
-	sleepCycleFullName := fmt.Sprintf("%v/%v", original.Namespace, original.Name)
-
-	//TODO: Bug finalizer creates a deadlock when removing or upgrading
-
-	//if original.ObjectMeta.DeletionTimestamp.IsZero() {
-	//	// The object is not being deleted, so if it does not have our finalizer,
-	//	// then lets add the finalizer and update the object.
-	//	if !containsString(original.ObjectMeta.Finalizers, SleepCycleFinalizer) {
-	//		original.ObjectMeta.Finalizers = append(original.ObjectMeta.Finalizers, SleepCycleFinalizer)
-	//		if err := r.Update(ctx, &original); err != nil {
-	//			r.logger.Error(err, fmt.Sprintf("🛑️ %s", SleepCycleStatusUpdateFailure), "sleepcycle", sleepCycleFullName)
-	//			r.Recorder.Event(&original, corev1.EventTypeWarning, "SleepCycleStatus", strings.ToLower(SleepCycleStatusUpdateFailure))
-	//			return ctrl.Result{}, err
-	//		}
-	//	}
-	//} else {
-	//	// The object is being deleted
-	//	if containsString(original.ObjectMeta.Finalizers, SleepCycleFinalizer) {
-	//		// our finalizer is present, so lets handle our external dependency
-	//		finalizers := []runtimeObjectFinalizer{r.FinalizeDeployments, r.FinalizeCronJobs, r.FinalizeStatefulSets, r.FinalizeHorizontalPodAutoscalers}
-	//		for _, finalizer := range finalizers {
-	//			result, err := finalizer(ctx, req, &original)
-	//			if err != nil {
-	//				r.logger.Error(err, fmt.Sprintf("🛑️ %s", SleepCycleFinalizerFailure), "sleepcycle", sleepCycleFullName)
-	//				r.Recorder.Event(&original, corev1.EventTypeWarning, "SleepCycleFinalizerFailure", fmt.Sprintf(
-	//					"%s: %s",
-	//					SleepCycleFinalizerFailure,
-	//					err.Error(),
-	//				))
-	//
-	//				return result, err
-	//			}
-	//		}
-	//
-	//		// remove our finalizer from the list and update it.
-	//		original.ObjectMeta.Finalizers = removeString(original.ObjectMeta.Finalizers, SleepCycleFinalizer)
-	//		if err := r.Update(ctx, &original); err != nil {
-	//			r.logger.Error(err, fmt.Sprintf("🛑️ %s", SleepCycleStatusUpdateFailure), "sleepcycle", sleepCycleFullName)
-	//			r.Recorder.Event(&original, corev1.EventTypeWarning, "SleepCycleStatus", strings.ToLower(SleepCycleStatusUpdateFailure))
-	//			return ctrl.Result{}, err
-	//		}
-	//	}
-	//
-	//	// Our finalizer has finished, so the reconciler can do nothing.
-	//	return reconcile.Result{}, nil
-	//}
-
-	if !original.Spec.Enabled {
+	nsks := "kube-system"
+	if req.Namespace == nsks {
+		r.logger.Info(fmt.Sprintf("setting sleepcycle schedule on resources in namespace %s is not supported", nsks))
 		return ctrl.Result{}, nil
 	}
 
-	currentOperation := r.getCurrentScheduledOperation(original)
+	provisioned := 0
+	total := 0
 
-	desired := *original.DeepCopy()
-	desired.Status.LastRunOperation = currentOperation.String()
-	if desired.Status.UsedBy == nil {
-		usedBy := make(map[string]int)
-		desired.Status.UsedBy = usedBy
-	}
-
-	r.logger = r.logger.WithValues("op", currentOperation.String())
-
-	if currentOperation != Watch {
-		reconcilers := []runtimeObjectReconciler{r.ReconcileDeployments, r.ReconcileCronJobs, r.ReconcileStatefulSets, r.ReconcileHorizontalPodAutoscalers}
-
-		for _, reconciler := range reconcilers {
-			result, err := reconciler(ctx, req, &original, &desired, currentOperation)
-			if err != nil {
-				if currentOperation != Watch {
-					desired.Status.LastRunTime = &metav1.Time{Time: time.Now()}
-					desired.Status.LastRunWasSuccessful = false
-				}
-
-				if err := r.Status().Update(ctx, &desired); err != nil {
-					r.logger.Error(err, fmt.Sprintf("🛑️ %s", SleepCycleStatusUpdateFailure), "sleepcycle", sleepCycleFullName)
-					r.Recorder.Event(&original, corev1.EventTypeWarning, "SleepCycleStatus", strings.ToLower(SleepCycleStatusUpdateFailure))
-					return ctrl.Result{}, err
-				}
-
-				return result, err
-			}
+	var original corev1alpha1.SleepCycle
+	if err := r.Get(ctx, req.NamespacedName, &original); err != nil {
+		if apierrors.IsNotFound(err) {
+			return ctrl.Result{}, nil
 		}
 
-		desired.Status.LastRunTime = &metav1.Time{Time: time.Now()}
-		desired.Status.LastRunWasSuccessful = true
-	}
-
-	nextScheduledShutdown, nextScheduledWakeup := r.getSchedulesTime(original, false)
-	if nextScheduledWakeup != nil {
-		tz := r.getTimeZone(original.Spec.WakeupTimeZone)
-		t := nextScheduledWakeup.In(tz)
-		desired.Status.NextScheduledWakeupTime = &metav1.Time{Time: t}
-	} else {
-		desired.Status.NextScheduledWakeupTime = nil
-	}
-	tz := r.getTimeZone(original.Spec.ShutdownTimeZone)
-	t := nextScheduledShutdown.In(tz)
-	desired.Status.NextScheduledShutdownTime = &metav1.Time{Time: t}
-
-	if err := r.Status().Update(ctx, &desired); err != nil {
-		r.logger.Error(err, fmt.Sprintf("🛑️ %s", SleepCycleStatusUpdateFailure), "sleepcycle", sleepCycleFullName)
-		r.Recorder.Event(&original, corev1.EventTypeWarning, "SleepCycleStatus", strings.ToLower(SleepCycleStatusUpdateFailure))
+		r.logger.Error(err, "unable to fetch sleepcycle")
 		return ctrl.Result{}, err
 	}
 
-	nextOperation, requeueAfter := r.getNextScheduledOperation(original, &currentOperation)
+	err := r.reconcileRbac(ctx, &original)
+	if err != nil {
+		r.recordEvent(&original, fmt.Sprintf("unable to create rbac resources in %s", req.Namespace), false)
+		return ctrl.Result{}, err
+	}
 
-	r.logger.Info("Requeue", "next-op", nextOperation.String(), "after", requeueAfter)
-	return ctrl.Result{RequeueAfter: requeueAfter}, nil
+	if err := r.Get(ctx, req.NamespacedName, &original); err != nil {
+		if apierrors.IsNotFound(err) {
+			return ctrl.Result{}, nil
+		}
+
+		r.logger.Error(err, "unable to fetch sleepcycle")
+		return ctrl.Result{}, err
+	}
+	reconcilers := []runtimeObjectReconciler{r.ReconcileDeployments, r.ReconcileCronJobs, r.ReconcileStatefulSets, r.ReconcileHorizontalPodAutoscalers}
+	var errors error
+
+	for _, reconciler := range reconcilers {
+		p, t, err := reconciler(ctx, req, &original)
+		if err != nil {
+			errors = multierror.Append(errors, err)
+		}
+
+		provisioned += p
+		total += t
+	}
+
+	if errors != nil {
+		if merr, ok := errors.(*multierror.Error); ok {
+			for _, rerr := range merr.Errors {
+				r.logger.Error(rerr, "failed to reconcile")
+			}
+		}
+	}
+
+	state := "Ready"
+	if provisioned != 0 && provisioned < total {
+		state = "Warning"
+	} else if provisioned == 0 && total != 0 {
+		state = "NotReady"
+	}
+
+	err = r.UpdateStatus(ctx, &original, state, []int{provisioned, total})
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	return ctrl.Result{RequeueAfter: requeueAfter}, errors
 }
+
+func (r *SleepCycleReconciler) UpdateStatus(ctx context.Context, sleepcycle *corev1alpha1.SleepCycle, state string, targets []int) error {
+	patch := client.MergeFrom(sleepcycle.DeepCopy())
+	sleepcycle.Status.State = state
+	sleepcycle.Status.Targets = fmt.Sprintf("%d/%d", targets[0], targets[1])
+
+	err := r.Status().Patch(ctx, sleepcycle, patch)
+	if err != nil {
+		r.logger.Error(err, "unable to patch sleepcycle status")
+		return err
+	}
+
+	return nil
+}
+
+//if !original.Spec.Enabled {
+//	return ctrl.Result{}, nil
+//}
+//desired := *original.DeepCopy()
+//reconcilers := []runtimeObjectReconciler{r.ReconcileDeployments, r.ReconcileCronJobs, r.ReconcileStatefulSets, r.ReconcileHorizontalPodAutoscalers}
+
+//r.logger = r.logger.WithValues("op", currentOperation.String())
+//tz := r.getTimeZone(original.Spec.ShutdownTimeZone)
+//t := nextScheduledShutdown.In(tz)
+//desired.Status.NextScheduledShutdownTime = &metav1.Time{Time: t}
+
+//if err := r.Status().Update(ctx, &desired); err != nil {
+//	r.logger.Error(err, fmt.Sprintf("🛑️ %s", SleepCycleStatusUpdateFailure), "sleepcycle", sleepCycleFullName)
+//	r.Recorder.Event(&original, corev1.EventTypeWarning, "SleepCycleStatus", strings.ToLower(SleepCycleStatusUpdateFailure))
+//	return ctrl.Result{}, err
+//}
 
 func (r *SleepCycleReconciler) ScaleDeployment(ctx context.Context, deployment appsv1.Deployment, replicas int32) error {
 	deepCopy := *deployment.DeepCopy()
@@ -301,22 +279,4 @@ func (r *SleepCycleReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&corev1alpha1.SleepCycle{}, eventFilters).
 		Complete(r)
-}
-
-func (r *SleepCycleReconciler) RecordEvent(sleepCycle corev1alpha1.SleepCycle, isError bool, namespacedName string, operation SleepCycleOperation, extra ...string) {
-	eventType := corev1.EventTypeNormal
-	reason := "SleepCycleOpSuccess"
-	message := fmt.Sprintf("%s on %s succeeded", operation.String(), namespacedName)
-
-	if isError {
-		eventType = corev1.EventTypeWarning
-		reason = "SleepCycleOpFailure"
-		message = fmt.Sprintf("%s on %s failed", operation.String(), namespacedName)
-	}
-
-	for _, s := range extra {
-		message = message + ". " + s
-	}
-
-	r.Recorder.Event(&sleepCycle, eventType, reason, strings.ToLower(message))
 }

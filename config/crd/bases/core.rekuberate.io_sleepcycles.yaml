@@ -16,6 +16,15 @@ spec:
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
+    - jsonPath: .spec.enabled
+      name: Enabled
+      type: boolean
+    - jsonPath: .status.state
+      name: State
+      type: string
+    - jsonPath: .status.targets
+      name: Targets
+      type: string
     - jsonPath: .spec.shutdown
       name: Shutdown Schedule
       type: string
@@ -27,15 +36,6 @@ spec:
       type: string
     - jsonPath: .spec.wakeupTimeZone
       name: Wakeup Timezone
-      type: string
-    - jsonPath: .spec.enabled
-      name: Enabled
-      type: boolean
-    - jsonPath: .status.lastRunWasSuccessful
-      name: Success
-      type: boolean
-    - jsonPath: .status.lastRunOperation
-      name: Last Op
       type: string
     name: v1alpha1
     schema:
@@ -59,12 +59,27 @@ spec:
             properties:
               enabled:
                 type: boolean
+              failedJobsHistoryLimit:
+                default: 1
+                format: int32
+                maximum: 3
+                minimum: 1
+                type: integer
+              runnerImage:
+                default: akyriako78/rekuberate-io-sleepcycles-runners
+                type: string
               shutdown:
                 pattern: (^((\*\/)?([0-5]?[0-9])((\,|\-|\/)([0-5]?[0-9]))*|\*)\s+((\*\/)?((2[0-3]|1[0-9]|[0-9]|00))((\,|\-|\/)(2[0-3]|1[0-9]|[0-9]|00))*|\*)\s+((\*\/)?([1-9]|[12][0-9]|3[01])((\,|\-|\/)([1-9]|[12][0-9]|3[01]))*|\*)\s+((\*\/)?([1-9]|1[0-2])((\,|\-|\/)([1-9]|1[0-2]))*|\*|(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|des))\s+((\*\/)?[0-6]((\,|\-|\/)[0-6])*|\*|00|(sun|mon|tue|wed|thu|fri|sat))\s*$)|@(annually|yearly|monthly|weekly|daily|hourly|reboot)
                 type: string
               shutdownTimeZone:
                 default: UTC
                 type: string
+              successfulJobsHistoryLimit:
+                default: 1
+                format: int32
+                maximum: 3
+                minimum: 1
+                type: integer
               wakeup:
                 pattern: (^((\*\/)?([0-5]?[0-9])((\,|\-|\/)([0-5]?[0-9]))*|\*)\s+((\*\/)?((2[0-3]|1[0-9]|[0-9]|00))((\,|\-|\/)(2[0-3]|1[0-9]|[0-9]|00))*|\*)\s+((\*\/)?([1-9]|[12][0-9]|3[01])((\,|\-|\/)([1-9]|[12][0-9]|3[01]))*|\*)\s+((\*\/)?([1-9]|1[0-2])((\,|\-|\/)([1-9]|1[0-2]))*|\*|(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|des))\s+((\*\/)?[0-6]((\,|\-|\/)[0-6])*|\*|00|(sun|mon|tue|wed|thu|fri|sat))\s*$)|@(annually|yearly|monthly|weekly|daily|hourly|reboot)
                 type: string
@@ -80,25 +95,10 @@ spec:
             properties:
               enabled:
                 type: boolean
-              lastRunOperation:
+              state:
                 type: string
-              lastRunTime:
-                format: date-time
+              targets:
                 type: string
-              lastRunWasSuccessful:
-                type: boolean
-              nextScheduledOp:
-                type: string
-              nextScheduledShutdown:
-                format: date-time
-                type: string
-              nextScheduledWakeUp:
-                format: date-time
-                type: string
-              usedBy:
-                additionalProperties:
-                  type: integer
-                type: object
             type: object
         type: object
     served: true

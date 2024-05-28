@@ -1,10 +1,12 @@
 
 # Image URL to use all building/pushing image targets
 #IMG_TAG ?= $(shell git rev-parse --short HEAD)
-IMG_TAG ?= 0.1.2
+IMG_TAG ?= 0.2.0
 IMG_NAME ?= rekuberate-io-sleepcycles
 DOCKER_HUB_NAME ?= $(shell docker info | sed '/Username:/!d;s/.* //')
 IMG ?= $(DOCKER_HUB_NAME)/$(IMG_NAME):$(IMG_TAG)
+RUNNERS_IMG_NAME ?= rekuberate-io-sleepcycles-runners
+KO_DOCKER_REPO = $(DOCKER_HUB_NAME)/$(RUNNERS_IMG_NAME)
 # ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
 ENVTEST_K8S_VERSION = 1.24.2
 
@@ -145,3 +147,13 @@ $(HELMIFY): $(LOCALBIN)
 
 helm: manifests kustomize helmify
 	$(KUSTOMIZE) build config/default | $(HELMIFY) charts/sleepcycles
+
+KO ?= $(LOCALBIN)/ko
+
+.PHONY: ko
+ko: $(KO) ## Download ko locally if necessary.
+$(KO): $(LOCALBIN)
+	test -s $(LOCALBIN)/ko || GOBIN=$(LOCALBIN) go install github.com/google/ko@latest
+
+ko-build-runner: ko
+	cd runners && ko build --bare .

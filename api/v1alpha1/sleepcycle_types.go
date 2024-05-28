@@ -35,7 +35,7 @@ type SleepCycleSpec struct {
 
 	// +kubebuilder:validation:Pattern:=`(^((\*\/)?([0-5]?[0-9])((\,|\-|\/)([0-5]?[0-9]))*|\*)\s+((\*\/)?((2[0-3]|1[0-9]|[0-9]|00))((\,|\-|\/)(2[0-3]|1[0-9]|[0-9]|00))*|\*)\s+((\*\/)?([1-9]|[12][0-9]|3[01])((\,|\-|\/)([1-9]|[12][0-9]|3[01]))*|\*)\s+((\*\/)?([1-9]|1[0-2])((\,|\-|\/)([1-9]|1[0-2]))*|\*|(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|des))\s+((\*\/)?[0-6]((\,|\-|\/)[0-6])*|\*|00|(sun|mon|tue|wed|thu|fri|sat))\s*$)|@(annually|yearly|monthly|weekly|daily|hourly|reboot)`
 	// +kubebuilder:validation:Type=string
-	WakeUp string `json:"wakeup,omitempty"`
+	WakeUp *string `json:"wakeup,omitempty"`
 
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:default:="UTC"
@@ -44,31 +44,48 @@ type SleepCycleSpec struct {
 	// +kubebuilder:validation:default:=true
 	// +kubebuilder:validation:Type=boolean
 	Enabled bool `json:"enabled"`
+
+	// +optional
+	// +kubebuilder:default=1
+	// +kubebuilder:validation:Type=integer
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=3
+	// +kubebuilder:validation:ExclusiveMinimum=false
+	// +kubebuilder:validation:ExclusiveMaximum=false
+	SuccessfulJobsHistoryLimit int32 `json:"successfulJobsHistoryLimit,omitempty"`
+
+	// +optional
+	// +kubebuilder:default=1
+	// +kubebuilder:validation:Type=integer
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=3
+	// +kubebuilder:validation:ExclusiveMinimum=false
+	// +kubebuilder:validation:ExclusiveMaximum=false
+	FailedJobsHistoryLimit int32 `json:"failedJobsHistoryLimit,omitempty"`
+
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:default:="akyriako78/rekuberate-io-sleepcycles-runners"
+	RunnerImage string `json:"runnerImage,omitempty"`
 }
 
 // SleepCycleStatus defines the observed state of SleepCycle
 type SleepCycleStatus struct {
-	UsedBy                    map[string]int `json:"usedBy,omitempty"`
-	Enabled                   bool           `json:"enabled,omitempty"`
-	NextScheduledShutdownTime *metav1.Time   `json:"nextScheduledShutdown,omitempty"`
-	NextScheduledWakeupTime   *metav1.Time   `json:"nextScheduledWakeUp,omitempty"`
-	NextScheduledOp           string         `json:"nextScheduledOp,omitempty"`
-	LastRunTime               *metav1.Time   `json:"lastRunTime,omitempty"`
-	LastRunOperation          string         `json:"lastRunOperation,omitempty"`
-	LastRunWasSuccessful      bool           `json:"lastRunWasSuccessful,omitempty"`
+	Enabled bool   `json:"enabled,omitempty"`
+	State   string `json:"state,omitempty"`
+	Targets string `json:"targets,omitempty"`
 }
 
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
 
 // SleepCycle is the Schema for the sleepcycles API
+// +kubebuilder:printcolumn:name="Enabled",type=boolean,JSONPath=`.spec.enabled`
+// +kubebuilder:printcolumn:name="State",type=string,JSONPath=`.status.state`
+// +kubebuilder:printcolumn:name="Targets",type=string,JSONPath=`.status.targets`
 // +kubebuilder:printcolumn:name="Shutdown Schedule",type=string,JSONPath=`.spec.shutdown`
 // +kubebuilder:printcolumn:name="Shutdown Timezone",type=string,JSONPath=`.spec.shutdownTimeZone`
 // +kubebuilder:printcolumn:name="Wakeup Schedule",type=string,JSONPath=`.spec.wakeup`
 // +kubebuilder:printcolumn:name="Wakeup Timezone",type=string,JSONPath=`.spec.wakeupTimeZone`
-// +kubebuilder:printcolumn:name="Enabled",type=boolean,JSONPath=`.spec.enabled`
-// +kubebuilder:printcolumn:name="Success",type=boolean,JSONPath=`.status.lastRunWasSuccessful`
-// +kubebuilder:printcolumn:name="Last Op",type=string,JSONPath=`.status.lastRunOperation`
 type SleepCycle struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

@@ -1,0 +1,23 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: hello-busybox
+  namespace: app-1
+  labels:
+    app: hello-busybox
+    rekuberate.io/sleepcycle: sleepcycle-app-1
+spec:
+  schedule: "* * * * *" #	Run every minute
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+            - name: hello-busybox
+              image: busybox:latest
+              imagePullPolicy: IfNotPresent
+              command:
+                - /bin/sh
+                - -c
+                - date; echo Hello!
+          restartPolicy: OnFailure
