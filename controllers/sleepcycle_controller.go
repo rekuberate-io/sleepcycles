@@ -136,7 +136,7 @@ func (r *SleepCycleReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		r.logger.Error(err, "unable to fetch sleepcycle")
 		return ctrl.Result{}, err
 	}
-	reconcilers := []runtimeObjectReconciler{r.ReconcileDeployments}
+	reconcilers := []runtimeObjectReconciler{r.ReconcileDeployments, r.ReconcileCronJobs}
 	var errors error
 
 	for _, reconciler := range reconcilers {
@@ -160,16 +160,10 @@ func (r *SleepCycleReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	state := "Ready"
 	if provisioned != 0 && provisioned < total {
 		state = "Warning"
-	} else if provisioned == 0 {
+	} else if provisioned == 0 && total != 0 {
 		state = "NotReady"
 	}
 
-	//original.Status.State = state
-	//original.Status.Targets = fmt.Sprintf("%d/%d", provisioned, total)
-	//err = r.Status().Update(ctx, &original)
-	//if err != nil {
-	//	return ctrl.Result{}, err
-	//}
 	err = r.UpdateStatus(ctx, &original, state, []int{provisioned, total})
 	if err != nil {
 		return ctrl.Result{}, err

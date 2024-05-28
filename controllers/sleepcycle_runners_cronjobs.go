@@ -69,10 +69,13 @@ func (r *SleepCycleReconciler) createCronJob(
 
 	annotations := make(map[string]string)
 	annotations[TargetTimezone] = *tz
-	annotations[Replicas] = fmt.Sprint(targetReplicas)
 
-	if targetReplicas == 0 {
-		annotations[Replicas] = strconv.FormatInt(1, 10)
+	if targetKind != "CronJob" {
+		annotations[Replicas] = fmt.Sprint(targetReplicas)
+
+		if targetReplicas == 0 {
+			annotations[Replicas] = strconv.FormatInt(1, 10)
+		}
 	}
 
 	job := &batchv1.CronJob{
@@ -149,6 +152,7 @@ func (r *SleepCycleReconciler) updateCronJob(
 	ctx context.Context,
 	logger logr.Logger,
 	cronJob *batchv1.CronJob,
+	kind string,
 	schedule string,
 	timezone string,
 	suspend bool,
@@ -159,8 +163,10 @@ func (r *SleepCycleReconciler) updateCronJob(
 	*deepCopy.Spec.TimeZone = timezone
 	*deepCopy.Spec.Suspend = suspend
 
-	if replicas != 0 {
-		deepCopy.Annotations[Replicas] = fmt.Sprint(replicas)
+	if kind != "CronJob" {
+		if replicas != 0 {
+			deepCopy.Annotations[Replicas] = fmt.Sprint(replicas)
+		}
 	}
 
 	if err := r.Update(ctx, deepCopy); err != nil {
@@ -226,7 +232,7 @@ func (r *SleepCycleReconciler) reconcileCronJob(
 			tz = sleepcycle.Spec.WakeupTimeZone
 		}
 
-		err := r.updateCronJob(ctx, logger, cronjob, schedule, *tz, suspend, targetReplicas)
+		err := r.updateCronJob(ctx, logger, cronjob, targetKind, schedule, *tz, suspend, targetReplicas)
 		if err != nil {
 			logger.Error(err, "failed to update runner", "name", cronObjectKey.Name)
 			return err

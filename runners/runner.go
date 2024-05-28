@@ -81,13 +81,16 @@ func main() {
 		isShutdownOp = false
 	}
 
-	replicas, err := strconv.ParseInt(cronjob.Annotations["rekuberate.io/replicas"], 10, 32)
-	if err != nil {
-		logger.Error(err, "failed to get rekuberate.io/replicas value")
-	}
-
 	target := cronjob.Labels["rekuberate.io/target"]
 	kind := cronjob.Labels["rekuberate.io/target-kind"]
+
+	replicas := int64(1)
+	if kind != "CronJob" {
+		replicas, err = strconv.ParseInt(cronjob.Annotations["rekuberate.io/replicas"], 10, 32)
+		if err != nil {
+			logger.Error(err, "failed to get rekuberate.io/replicas value")
+		}
+	}
 
 	if err == nil {
 		err := run(ns, cronjob, target, kind, replicas, isShutdownOp)
@@ -117,6 +120,10 @@ func run(ns string, cronjob *batchv1.CronJob, target string, kind string, target
 	case "CronJob":
 		if shutdown {
 			targetReplicas = 0
+		}
+		err := scaleCronJob(ctx, ns, cronjob, target, int32(targetReplicas))
+		if err != nil {
+			serr = errors.Wrap(err, smsg)
 		}
 	case "HorizontalPodAutoscaler":
 		if shutdown {
@@ -176,5 +183,32 @@ func scaleDeployment(ctx context.Context, namespace string, cronjob *batchv1.Cro
 
 	logger.Info("deployment already in desired state", "namespace", namespace, "deployment", target, "replicas", targetReplicas)
 
+	return nil
+}
+
+func scaleCronJob(ctx context.Context, namespace string, cronjob *batchv1.CronJob, target string, targetReplicas int32) error {
+	cj, err := clientSet.BatchV1().CronJobs(namespace).Get(ctx, target, metav1.GetOptions{})
+	if err != nil {
+		return err
+	}
+
+	suspend := targetReplicas <= 0
+	if suspend != *cj.Spec.Suspend {
+		cj.Spec.Suspend = &suspend
+		_, err = clientSet.BatchV1().CronJobs(namespace).Update(ctx, cj, metav1.UpdateOptions{})
+		if err != nil {
+			return err
+		}
+
+		action := "resumed"
+		if suspend {
+			action = "suspended"
+		}
+
+		logger.Info(fmt.Sprintf("cronjob %s", action), "namespace", namespace, "cronjob", target)
+		return nil
+	}
+
+	logger.Info("cronjob already in desired state", "namespace", namespace, "cronjob", target, "suspended", suspend)
 	return nil
 }

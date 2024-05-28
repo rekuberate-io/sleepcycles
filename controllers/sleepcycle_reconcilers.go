@@ -5,6 +5,7 @@ import (
 	"github.com/hashicorp/go-multierror"
 	corev1alpha1 "github.com/rekuberate-io/sleepcycles/api/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -40,6 +41,48 @@ func (r *SleepCycleReconciler) ReconcileDeployments(
 		kind := deployment.TypeMeta.Kind
 		meta := deployment.ObjectMeta
 		replicas := *deployment.Spec.Replicas
+
+		err := r.reconcile(ctx, logger, sleepcycle, kind, meta, replicas)
+		if err != nil {
+			provisioned -= 1
+			errors = multierror.Append(errors, err)
+		}
+	}
+
+	return provisioned, total, errors
+}
+
+func (r *SleepCycleReconciler) ReconcileCronJobs(
+	ctx context.Context,
+	req ctrl.Request,
+	sleepcycle *corev1alpha1.SleepCycle,
+) (int, int, error) {
+	provisioned := 0
+	total := 0
+
+	cronJobList := batchv1.CronJobList{}
+	if err := r.List(ctx, &cronJobList, &client.ListOptions{Namespace: req.NamespacedName.Namespace}); err != nil {
+		return 0, 0, err
+	}
+
+	if len(cronJobList.Items) == 0 {
+		return 0, 0, nil
+	}
+
+	var errors error
+	total = len(cronJobList.Items)
+	provisioned = total
+
+	for _, cronjob := range cronJobList.Items {
+		logger := r.logger.WithValues("cronjob", cronjob.Name)
+
+		kind := cronjob.TypeMeta.Kind
+		meta := cronjob.ObjectMeta
+
+		replicas := int32(1)
+		if *cronjob.Spec.Suspend {
+			replicas = int32(0)
+		}
 
 		err := r.reconcile(ctx, logger, sleepcycle, kind, meta, replicas)
 		if err != nil {
