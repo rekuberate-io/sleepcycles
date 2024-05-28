@@ -117,6 +117,10 @@ func run(ns string, cronjob *batchv1.CronJob, target string, kind string, target
 		if shutdown {
 			targetReplicas = 0
 		}
+		err := scaleStatefulSets(ctx, ns, cronjob, target, int32(targetReplicas))
+		if err != nil {
+			serr = errors.Wrap(err, smsg)
+		}
 	case "CronJob":
 		if shutdown {
 			targetReplicas = 0
@@ -210,5 +214,38 @@ func scaleCronJob(ctx context.Context, namespace string, cronjob *batchv1.CronJo
 	}
 
 	logger.Info("cronjob already in desired state", "namespace", namespace, "cronjob", target, "suspended", suspend)
+	return nil
+}
+
+func scaleStatefulSets(ctx context.Context, namespace string, cronjob *batchv1.CronJob, target string, targetReplicas int32) error {
+	statefulSet, err := clientSet.AppsV1().StatefulSets(namespace).Get(ctx, target, metav1.GetOptions{})
+	if err != nil {
+		return err
+	}
+
+	currentReplicas := *statefulSet.Spec.Replicas
+	err = syncReplicas(ctx, namespace, cronjob, currentReplicas, targetReplicas)
+	if err != nil {
+		return err
+	}
+
+	if currentReplicas != targetReplicas {
+		statefulSet.Spec.Replicas = &targetReplicas
+		_, err = clientSet.AppsV1().StatefulSets(namespace).Update(ctx, statefulSet, metav1.UpdateOptions{})
+		if err != nil {
+			return err
+		}
+
+		action := "down"
+		if targetReplicas > 0 {
+			action = "up"
+		}
+
+		logger.Info(fmt.Sprintf("scaled %s statefulset", action), "namespace", namespace, "statefulset", target, "replicas", targetReplicas)
+		return nil
+	}
+
+	logger.Info("statefulset already in desired state", "namespace", namespace, "statefulset", target, "replicas", targetReplicas)
+
 	return nil
 }

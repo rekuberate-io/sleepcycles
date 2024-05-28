@@ -100,6 +100,47 @@ func (r *SleepCycleReconciler) ReconcileCronJobs(
 	return provisioned, total, errors
 }
 
+func (r *SleepCycleReconciler) ReconcileStatefulSets(
+	ctx context.Context,
+	req ctrl.Request,
+	sleepcycle *corev1alpha1.SleepCycle,
+) (int, int, error) {
+	provisioned := 0
+	total := 0
+
+	statefulSetList := appsv1.StatefulSetList{}
+	if err := r.List(ctx, &statefulSetList, &client.ListOptions{Namespace: req.NamespacedName.Namespace}); err != nil {
+		return 0, 0, err
+	}
+
+	if len(statefulSetList.Items) == 0 {
+		return 0, 0, nil
+	}
+
+	var errors error
+	for _, statefulSet := range statefulSetList.Items {
+		logger := r.logger.WithValues("statefulset", statefulSet.Name)
+
+		kind := statefulSet.TypeMeta.Kind
+		meta := statefulSet.ObjectMeta
+		replicas := *statefulSet.Spec.Replicas
+
+		hasSleepCycle := r.hasLabel(&meta, sleepcycle.Name)
+		if hasSleepCycle {
+			total += 1
+			provisioned += 1
+
+			err := r.reconcile(ctx, logger, sleepcycle, kind, meta, replicas)
+			if err != nil {
+				provisioned -= 1
+				errors = multierror.Append(errors, err)
+			}
+		}
+	}
+
+	return provisioned, total, errors
+}
+
 //
 //func (r *SleepCycleReconciler) ReconcileCronJobs(ctx context.Context,
 //	req ctrl.Request,
