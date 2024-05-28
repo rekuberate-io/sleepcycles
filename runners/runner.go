@@ -8,9 +8,13 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap/zapcore"
 	batchv1 "k8s.io/api/batch/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes"
+	typedv1core "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/record"
 	"os"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
@@ -28,6 +32,8 @@ var (
 	podEnvVar       = "MY_POD_NAME"
 	namespaceEnvVar = "MY_POD_NAMESPACE"
 	cronjobEnvVar   = "MY_CRONJOB_NAME"
+
+	eventRecorder record.EventRecorder
 )
 
 func init() {
@@ -70,6 +76,16 @@ func main() {
 	}
 	clientSet = cs
 
+	scheme := runtime.NewScheme()
+	_ = corev1.AddToScheme(scheme)
+
+	eventBroadcaster := record.NewBroadcaster()
+	defer eventBroadcaster.Shutdown()
+
+	eventBroadcaster.StartStructuredLogging(4)
+	eventBroadcaster.StartRecordingToSink(&typedv1core.EventSinkImpl{Interface: clientSet.CoreV1().Events("")})
+	eventRecorder = eventBroadcaster.NewRecorder(scheme, corev1.EventSource{})
+
 	cronjob, err := clientSet.BatchV1().CronJobs(ns).Get(ctx, cj, metav1.GetOptions{})
 	if err != nil {
 		logger.Error(err, "failed to get runner cronjob")
@@ -95,7 +111,14 @@ func main() {
 	if err == nil {
 		err := run(ns, cronjob, target, kind, replicas, isShutdownOp)
 		if err != nil {
+			recordEvent(cronjob, err.Error(), true)
 			logger.Error(err, "runner failed", "target", target, "kind", kind)
+		} else {
+			action := "up"
+			if isShutdownOp {
+				action = "down"
+			}
+			recordEvent(cronjob, fmt.Sprintf("runner scaled %s %s", action, target), false)
 		}
 	}
 }
@@ -285,4 +308,16 @@ func scaleHorizontalPodAutoscalers(ctx context.Context, namespace string, cronjo
 	logger.Info("horizontal pod autoscaler already in desired state", "namespace", namespace, "hpa", target, "replicas", targetReplicas)
 
 	return nil
+}
+
+func recordEvent(cronjob *batchv1.CronJob, message string, isError bool) {
+	eventType := corev1.EventTypeNormal
+	reason := "SleepCycleOpSuccess"
+
+	if isError {
+		eventType = corev1.EventTypeWarning
+		reason = "SleepCycleOpFailure"
+	}
+
+	eventRecorder.Event(cronjob, eventType, reason, strings.ToLower(message))
 }
