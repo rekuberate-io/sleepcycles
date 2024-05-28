@@ -33,11 +33,11 @@ func (r *SleepCycleReconciler) generateToken() (string, error) {
 
 func (r *SleepCycleReconciler) recordEvent(sleepCycle *corev1alpha1.SleepCycle, message string, isError bool) {
 	eventType := corev1.EventTypeNormal
-	reason := "SleepCycleOpSuccess"
+	reason := "SuccessfulSleepCycleReconcile"
 
 	if isError {
 		eventType = corev1.EventTypeWarning
-		reason = "SleepCycleOpFailure"
+		reason = "FailedSleepCycleReconcile"
 	}
 
 	r.Recorder.Event(sleepCycle, eventType, reason, strings.ToLower(message))

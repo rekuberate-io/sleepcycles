@@ -20,6 +20,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"strconv"
 	"strings"
+	"time"
 )
 
 var (
@@ -77,14 +78,14 @@ func main() {
 	clientSet = cs
 
 	scheme := runtime.NewScheme()
-	_ = corev1.AddToScheme(scheme)
+	_ = batchv1.AddToScheme(scheme)
 
 	eventBroadcaster := record.NewBroadcaster()
 	defer eventBroadcaster.Shutdown()
 
 	eventBroadcaster.StartStructuredLogging(4)
 	eventBroadcaster.StartRecordingToSink(&typedv1core.EventSinkImpl{Interface: clientSet.CoreV1().Events("")})
-	eventRecorder = eventBroadcaster.NewRecorder(scheme, corev1.EventSource{})
+	eventRecorder = eventBroadcaster.NewRecorder(scheme, corev1.EventSource{Component: "rekuberate-io/sleepcycles-runner"})
 
 	cronjob, err := clientSet.BatchV1().CronJobs(ns).Get(ctx, cj, metav1.GetOptions{})
 	if err != nil {
@@ -312,12 +313,13 @@ func scaleHorizontalPodAutoscalers(ctx context.Context, namespace string, cronjo
 
 func recordEvent(cronjob *batchv1.CronJob, message string, isError bool) {
 	eventType := corev1.EventTypeNormal
-	reason := "SleepCycleOpSuccess"
+	reason := "SuccessfulSleepCycleScale"
 
 	if isError {
 		eventType = corev1.EventTypeWarning
-		reason = "SleepCycleOpFailure"
+		reason = "FailedSleepCycleScale"
 	}
 
 	eventRecorder.Event(cronjob, eventType, reason, strings.ToLower(message))
+	time.Sleep(2 * time.Second)
 }
