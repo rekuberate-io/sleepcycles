@@ -110,6 +110,12 @@ func (r *SleepCycleReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 	r.logger.Info("reconciling sleepcycle")
 
+	nsks := "kube-system"
+	if req.Namespace == nsks {
+		r.logger.Info(fmt.Sprintf("setting sleepcycle schedule on resources in namespace %s is not supported", nsks))
+		return ctrl.Result{}, nil
+	}
+
 	provisioned := 0
 	total := 0
 
