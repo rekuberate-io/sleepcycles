@@ -133,6 +133,10 @@ func run(ns string, cronjob *batchv1.CronJob, target string, kind string, target
 		if shutdown {
 			targetReplicas = 1
 		}
+		err := scaleHorizontalPodAutoscalers(ctx, ns, cronjob, target, int32(targetReplicas))
+		if err != nil {
+			serr = errors.Wrap(err, smsg)
+		}
 	default:
 		err := fmt.Errorf("not supported kind: %s", kind)
 		serr = errors.Wrap(err, smsg)
@@ -246,6 +250,39 @@ func scaleStatefulSets(ctx context.Context, namespace string, cronjob *batchv1.C
 	}
 
 	logger.Info("statefulset already in desired state", "namespace", namespace, "statefulset", target, "replicas", targetReplicas)
+
+	return nil
+}
+
+func scaleHorizontalPodAutoscalers(ctx context.Context, namespace string, cronjob *batchv1.CronJob, target string, targetReplicas int32) error {
+	hpa, err := clientSet.AutoscalingV1().HorizontalPodAutoscalers(namespace).Get(ctx, target, metav1.GetOptions{})
+	if err != nil {
+		return err
+	}
+
+	currentReplicas := hpa.Spec.MaxReplicas
+	err = syncReplicas(ctx, namespace, cronjob, currentReplicas, targetReplicas)
+	if err != nil {
+		return err
+	}
+
+	if currentReplicas != targetReplicas {
+		hpa.Spec.MaxReplicas = targetReplicas
+		_, err = clientSet.AutoscalingV1().HorizontalPodAutoscalers(namespace).Update(ctx, hpa, metav1.UpdateOptions{})
+		if err != nil {
+			return err
+		}
+
+		action := "down"
+		if targetReplicas > 0 {
+			action = "up"
+		}
+
+		logger.Info(fmt.Sprintf("scaled max replicas %s", action), "namespace", namespace, "hpa", target, "replicas", targetReplicas)
+		return nil
+	}
+
+	logger.Info("horizontal pod autoscaler already in desired state", "namespace", namespace, "hpa", target, "replicas", targetReplicas)
 
 	return nil
 }

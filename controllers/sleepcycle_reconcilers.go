@@ -5,6 +5,7 @@ import (
 	"github.com/hashicorp/go-multierror"
 	corev1alpha1 "github.com/rekuberate-io/sleepcycles/api/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
+	autoscalingv1 "k8s.io/api/autoscaling/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -124,6 +125,47 @@ func (r *SleepCycleReconciler) ReconcileStatefulSets(
 		kind := statefulSet.TypeMeta.Kind
 		meta := statefulSet.ObjectMeta
 		replicas := *statefulSet.Spec.Replicas
+
+		hasSleepCycle := r.hasLabel(&meta, sleepcycle.Name)
+		if hasSleepCycle {
+			total += 1
+			provisioned += 1
+
+			err := r.reconcile(ctx, logger, sleepcycle, kind, meta, replicas)
+			if err != nil {
+				provisioned -= 1
+				errors = multierror.Append(errors, err)
+			}
+		}
+	}
+
+	return provisioned, total, errors
+}
+
+func (r *SleepCycleReconciler) ReconcileHorizontalPodAutoscalers(
+	ctx context.Context,
+	req ctrl.Request,
+	sleepcycle *corev1alpha1.SleepCycle,
+) (int, int, error) {
+	provisioned := 0
+	total := 0
+
+	hpaList := autoscalingv1.HorizontalPodAutoscalerList{}
+	if err := r.List(ctx, &hpaList, &client.ListOptions{Namespace: req.NamespacedName.Namespace}); err != nil {
+		return 0, 0, err
+	}
+
+	if len(hpaList.Items) == 0 {
+		return 0, 0, nil
+	}
+
+	var errors error
+	for _, hpa := range hpaList.Items {
+		logger := r.logger.WithValues("hpa", hpa.Name)
+
+		kind := hpa.TypeMeta.Kind
+		meta := hpa.ObjectMeta
+		replicas := hpa.Spec.MaxReplicas
 
 		hasSleepCycle := r.hasLabel(&meta, sleepcycle.Name)
 		if hasSleepCycle {

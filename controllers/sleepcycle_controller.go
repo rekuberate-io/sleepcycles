@@ -136,7 +136,7 @@ func (r *SleepCycleReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		r.logger.Error(err, "unable to fetch sleepcycle")
 		return ctrl.Result{}, err
 	}
-	reconcilers := []runtimeObjectReconciler{r.ReconcileDeployments, r.ReconcileCronJobs, r.ReconcileStatefulSets}
+	reconcilers := []runtimeObjectReconciler{r.ReconcileDeployments, r.ReconcileCronJobs, r.ReconcileStatefulSets, r.ReconcileHorizontalPodAutoscalers}
 	var errors error
 
 	for _, reconciler := range reconcilers {
