@@ -32,9 +32,6 @@ func (r *SleepCycleReconciler) ReconcileDeployments(
 	}
 
 	var errors error
-	total = len(deploymentList.Items)
-	provisioned = total
-
 	for _, deployment := range deploymentList.Items {
 		logger := r.logger.WithValues("deployment", deployment.Name)
 
@@ -42,10 +39,16 @@ func (r *SleepCycleReconciler) ReconcileDeployments(
 		meta := deployment.ObjectMeta
 		replicas := *deployment.Spec.Replicas
 
-		err := r.reconcile(ctx, logger, sleepcycle, kind, meta, replicas)
-		if err != nil {
-			provisioned -= 1
-			errors = multierror.Append(errors, err)
+		hasSleepCycle := r.hasLabel(&meta, sleepcycle.Name)
+		if hasSleepCycle {
+			total += 1
+			provisioned += 1
+
+			err := r.reconcile(ctx, logger, sleepcycle, kind, meta, replicas)
+			if err != nil {
+				provisioned -= 1
+				errors = multierror.Append(errors, err)
+			}
 		}
 	}
 
@@ -70,9 +73,6 @@ func (r *SleepCycleReconciler) ReconcileCronJobs(
 	}
 
 	var errors error
-	total = len(cronJobList.Items)
-	provisioned = total
-
 	for _, cronjob := range cronJobList.Items {
 		logger := r.logger.WithValues("cronjob", cronjob.Name)
 
@@ -84,10 +84,16 @@ func (r *SleepCycleReconciler) ReconcileCronJobs(
 			replicas = int32(0)
 		}
 
-		err := r.reconcile(ctx, logger, sleepcycle, kind, meta, replicas)
-		if err != nil {
-			provisioned -= 1
-			errors = multierror.Append(errors, err)
+		hasSleepCycle := r.hasLabel(&meta, sleepcycle.Name)
+		if hasSleepCycle {
+			total += 1
+			provisioned += 1
+
+			err := r.reconcile(ctx, logger, sleepcycle, kind, meta, replicas)
+			if err != nil {
+				provisioned -= 1
+				errors = multierror.Append(errors, err)
+			}
 		}
 	}
 

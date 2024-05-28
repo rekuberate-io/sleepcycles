@@ -250,18 +250,15 @@ func (r *SleepCycleReconciler) reconcile(
 	targetMeta metav1.ObjectMeta,
 	targetReplicas int32,
 ) error {
-	hasSleepCycle := r.hasLabel(&targetMeta, sleepcycle.Name)
-	if hasSleepCycle {
-		err := r.reconcileCronJob(ctx, logger, sleepcycle, targetKind, targetMeta, targetReplicas, true)
+	err := r.reconcileCronJob(ctx, logger, sleepcycle, targetKind, targetMeta, targetReplicas, true)
+	if err != nil {
+		return err
+	}
+
+	if sleepcycle.Spec.WakeUp != nil {
+		err := r.reconcileCronJob(ctx, logger, sleepcycle, targetKind, targetMeta, targetReplicas, false)
 		if err != nil {
 			return err
-		}
-
-		if sleepcycle.Spec.WakeUp != nil {
-			err := r.reconcileCronJob(ctx, logger, sleepcycle, targetKind, targetMeta, targetReplicas, false)
-			if err != nil {
-				return err
-			}
 		}
 	}
 
