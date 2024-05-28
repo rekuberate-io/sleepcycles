@@ -1,7 +1,7 @@
 
 # Image URL to use all building/pushing image targets
 #IMG_TAG ?= $(shell git rev-parse --short HEAD)
-IMG_TAG ?= 0.1.2
+IMG_TAG ?= 0.2.0
 IMG_NAME ?= rekuberate-io-sleepcycles
 DOCKER_HUB_NAME ?= $(shell docker info | sed '/Username:/!d;s/.* //')
 IMG ?= $(DOCKER_HUB_NAME)/$(IMG_NAME):$(IMG_TAG)
@@ -146,7 +146,7 @@ $(HELMIFY): $(LOCALBIN)
 	test -s $(LOCALBIN)/helmify || GOBIN=$(LOCALBIN) go install github.com/arttor/helmify/cmd/helmify@latest
 
 helm: manifests kustomize helmify
-	$(KUSTOMIZE) build config/default | $(HELMIFY) config/helm
+	$(KUSTOMIZE) build config/default | $(HELMIFY) charts/sleepcycles
 
 KO ?= $(LOCALBIN)/ko
 
