@@ -141,16 +141,19 @@ func (r *SleepCycleReconciler) createCronJob(
 
 	err = r.Create(ctx, job)
 	if err != nil {
+		r.recordEvent(sleepcycle, fmt.Sprintf("unable to create runner %s/%s", cronObjectKey.Namespace, cronObjectKey.Name), true)
 		logger.Error(err, "unable to create runner", "cronjob", cronObjectKey.Name)
 		return nil, err
 	}
 
+	r.recordEvent(sleepcycle, fmt.Sprintf("created runner %s/%s", cronObjectKey.Namespace, cronObjectKey.Name), false)
 	return job, nil
 }
 
 func (r *SleepCycleReconciler) updateCronJob(
 	ctx context.Context,
 	logger logr.Logger,
+	sleepcycle *corev1alpha1.SleepCycle,
 	cronJob *batchv1.CronJob,
 	kind string,
 	schedule string,
@@ -170,18 +173,22 @@ func (r *SleepCycleReconciler) updateCronJob(
 	}
 
 	if err := r.Update(ctx, deepCopy); err != nil {
+		r.recordEvent(sleepcycle, fmt.Sprintf("unable to update runner %s/%s", cronJob.Namespace, cronJob.Name), true)
 		logger.Error(err, "unable to update runner", "cronjob", cronJob.Name)
 		return err
 	}
 
+	r.recordEvent(sleepcycle, fmt.Sprintf("updated runner %s/%s", cronJob.Namespace, cronJob.Name), false)
 	return nil
 }
 
-func (r *SleepCycleReconciler) deleteCronJob(ctx context.Context, cronJob *batchv1.CronJob) error {
+func (r *SleepCycleReconciler) deleteCronJob(ctx context.Context, sleepcycle *corev1alpha1.SleepCycle, cronJob *batchv1.CronJob) error {
 	if err := r.Delete(ctx, cronJob); err != nil {
+		r.recordEvent(sleepcycle, fmt.Sprintf("unable to delete runner %s/%s", cronJob.Namespace, cronJob.Name), true)
 		return err
 	}
 
+	r.recordEvent(sleepcycle, fmt.Sprintf("deleted runner %s/%s", cronJob.Namespace, cronJob.Name), false)
 	return nil
 }
 
@@ -218,7 +225,7 @@ func (r *SleepCycleReconciler) reconcileCronJob(
 
 	if cronjob != nil {
 		if !isShutdownOp && sleepcycle.Spec.WakeUp == nil {
-			err := r.deleteCronJob(ctx, cronjob)
+			err := r.deleteCronJob(ctx, sleepcycle, cronjob)
 			if err != nil {
 				return err
 			}
@@ -232,7 +239,7 @@ func (r *SleepCycleReconciler) reconcileCronJob(
 			tz = sleepcycle.Spec.WakeupTimeZone
 		}
 
-		err := r.updateCronJob(ctx, logger, cronjob, targetKind, schedule, *tz, suspend, targetReplicas)
+		err := r.updateCronJob(ctx, logger, sleepcycle, cronjob, targetKind, schedule, *tz, suspend, targetReplicas)
 		if err != nil {
 			logger.Error(err, "failed to update runner", "name", cronObjectKey.Name)
 			return err

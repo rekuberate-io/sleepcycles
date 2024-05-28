@@ -117,5 +117,6 @@ func (r *SleepCycleReconciler) reconcileRbac(ctx context.Context, sleepcycle *co
 		return err
 	}
 
+	r.recordEvent(sleepcycle, fmt.Sprintf("created rbac resources in %s", sleepcycle.Namespace), true)
 	return nil
 }
