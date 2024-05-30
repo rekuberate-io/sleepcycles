@@ -10,11 +10,7 @@ in that way you can:
 - _reduce_ your power consumption
 - _lower_ you carbon footprint
 
-Watch it here in action:
-
 [//]: # (![rekuberate-io-sleepcycles.gif]&#40;docs/images/rekuberate-io-sleepcycles.gif&#41;)
-
-[rekuberate-io-sleepcycles.mp4](docs/images/rekuberate-io-sleepcycles.mp4)
 
 ## Getting Started
 You’ll need a Kubernetes cluster to run against. You can use [KIND](https://sigs.k8s.io/kind) or [K3D](https://k3d.io) to get a local cluster for testing, 
