@@ -11,7 +11,7 @@ in that way you can:
 - _lower_ you carbon footprint
 
 Watch it here in action:
-https://github.com/rekuberate-io/sleepcycles/raw/main/docs/images/rekuberate-io%E2%A7%B8sleepcycles.mp4
+
 <video src="https://github.com/rekuberate-io/sleepcycles/raw/main/docs/images/rekuberate-io%E2%A7%B8sleepcycles.mp4" width="100%" height="100%" controls></video>
 
 ## Getting Started
