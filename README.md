@@ -10,6 +10,14 @@ in that way you can:
 - _reduce_ your power consumption
 - _lower_ you carbon footprint
 
+Watch it here in action:
+
+<div align="left">
+      <a href="https://youtu.be/hxaunYJAjms?si=LPAis4cMUUeNmIdQ">
+         <img src="https://img.youtube.com/vi/hxaunYJAjms/0.jpg" style="width:100%;">
+      </a>
+</div>
+
 ## Getting Started
 You’ll need a Kubernetes cluster to run against. You can use [KIND](https://sigs.k8s.io/kind) or [K3D](https://k3d.io) to get a local cluster for testing, 
 or run against a remote cluster. 
