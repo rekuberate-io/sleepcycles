@@ -223,9 +223,11 @@ func (r *SleepCycleReconciler) reconcileCronJob(
 		}
 	}
 
-	//TODO: If cronjob is actively running, quit and wait next reconciliation loop
-
 	if cronjob != nil {
+		if cronjob.Status.Active != nil {
+			return nil
+		}
+
 		if !isShutdownOp && sleepcycle.Spec.WakeUp == nil {
 			err := r.deleteCronJob(ctx, sleepcycle, cronjob)
 			if err != nil {
