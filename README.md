@@ -15,7 +15,7 @@ You’ll need a Kubernetes cluster to run against. You can use [KIND](https://si
 or run against a remote cluster. 
 
 > [!CAUTION]
-> Earliest compatible Kubernetes version is **1.25** 
+> Minimum required Kubernetes version is **1.25** 
 
 ### Samples
 
@@ -64,6 +64,9 @@ and the following **non-mandatory** properties:
 
 * _whoami-app-1_x-deployment.yaml_, manifests to deploy 2 `Deployment` that provisions _traefik/whoami_ in namespace `app-1` 
 * _whoami-app-2_x-deployment.yaml_, manifests to deploy a `Deployment`that provisions _traefik/whoami_ in namespace `app-2`
+* _apache-hpa.yaml_, manifest to deploy an `HorizontalPodAutoscaler` for a PHP application in namespace `app-2`
+* _nginx-statefulset.yaml_, manifest to deploy a `Statefulset`in namespace `app-2`
+* _busybox-cronjob.yaml_, manifest to deploy a `Statefulset`in namespace `app-1`
 
 `SleepCycle` is a namespace-scoped custom resource; the controller will monitor all the resources in that namespace that
 are marked with a `Label` that has as key `rekuberate.io/sleepcycle:` and as value the `name` of the manifest you created:
