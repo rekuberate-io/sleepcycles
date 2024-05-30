@@ -12,7 +12,7 @@ in that way you can:
 
 Watch it here in action:
 
-<video src="https://github.com/rekuberate-io/sleepcycles/raw/main/docs/images/rekuberate-io%E2%A7%B8sleepcycles.mp4" width="100%" height="100%" controls></video>
+![rekuberate-io-sleepcycles.gif](docs/images/rekuberate-io-sleepcycles.gif)
 
 ## Getting Started
 You’ll need a Kubernetes cluster to run against. You can use [KIND](https://sigs.k8s.io/kind) or [K3D](https://k3d.io) to get a local cluster for testing, 
