@@ -2,6 +2,16 @@ apiVersion: v1
 entries:
   sleepcycles:
   - apiVersion: v2
+    appVersion: 0.2.3
+    created: "2024-06-01T11:41:42.194113388Z"
+    description: Define sleep and wake up cycles for your Kubernetes resources
+    digest: b2ca8ee2daa1934e35c2532e5c4c16b6a85f3db3ad13f430f15e783fae2df294
+    name: sleepcycles
+    type: application
+    urls:
+    - https://github.com/rekuberate-io/sleepcycles/releases/download/sleepcycles-0.2.3/sleepcycles-0.2.3.tgz
+    version: 0.2.3
+  - apiVersion: v2
     appVersion: 0.2.1
     created: "2024-05-30T19:13:31.552260645Z"
     description: Define sleep and wake up cycles for your Kubernetes resources
@@ -41,4 +51,4 @@ entries:
     urls:
     - https://github.com/rekuberate-io/sleepcycles/releases/download/sleepcycles-0.1.0/sleepcycles-0.1.0.tgz
     version: 0.1.0
-generated: "2024-05-30T19:13:31.552329261Z"
+generated: "2024-06-01T11:41:42.194133916Z"
