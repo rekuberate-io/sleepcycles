@@ -110,8 +110,7 @@ The diagram below describes how `rekuberate.io/sleepcycles` are dealing with sch
 2. The controller, for **every** `SleepCycle` resource within the namespace `app-1`, collects all the resources that have been marked with the label `rekuberate.io/sleepcycle: sleepcycle-app1`.
 3. It provisions, for **every** workload - in this case deployment `deployment-app1` a `CronJob` for the shutdown schedule and optionally a second `CronJob` if a wake-up schedule is provided.
 4. It provisions a `ServiceAccount`, a `Role` and a `RoleBinding` **per namespace**, in order to make possible for runner-pods to update resources' specs.
-5. The `Runner` pods will be created automatically by the cron jobs and are responsible for scaling the resources up or down. 
-
+5. The `Runner` pods will be created automatically by the cron jobs and are responsible for scaling the resources up or down.
 
 ![SCR-20240527-q9y.png](docs/images/SCR-20240527-qei.png)
 
@@ -120,6 +119,18 @@ The diagram below describes how `rekuberate.io/sleepcycles` are dealing with sch
 > `StatefulSet` and a `HorizontalPodAutoscaler`. There are two exception though:
 > - a `HorizontalPodAutoscaler` will scale down to `1` replica and not to `0` as for a `Deployment` or a `Statefulset`.
 > - a `CronJob` has no replicas to scale up or down, it is going to be enabled or suspended respectively.
+
+### Using it together with ArgoCD
+
+You can combine `rekuberate.io/sleepcycles` with applications provisioned with [ArgoCD](https://argoproj.github.io/cd/), 
+**as long as** you disable [self-healing](https://argo-cd.readthedocs.io/en/stable/user-guide/auto_sync/#automatic-self-healing) 
+when an automatic sync policy is enabled:
+
+![Screenshot from 2024-06-01 14-00-23.png](docs/images/argocd.png)
+
+> [!TIP]
+> There is a git repository in place, with all the necessary artifacts to deploy via ArgoCD 
+> an nginx application and a preconfigured sleepcycle. You can find the git repo [here](https://github.com/rekuberate-io/argocd-guide). 
 
 ## Deploy
 
