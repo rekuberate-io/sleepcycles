@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	serviceAccountName = "rekuberate-runner"
+	serviceAccountName = "sleecycles-runner"
 )
 
 func (r *SleepCycleReconciler) reconcileRbac(ctx context.Context, sleepcycle *corev1alpha1.SleepCycle) error {
@@ -72,17 +72,33 @@ func (r *SleepCycleReconciler) reconcileRbac(ctx context.Context, sleepcycle *co
 		return err
 	}
 
-	r.logger.Info("creating cluster role", "role", fmt.Sprintf("%s-role", serviceAccountName))
+	r.logger.Info("creating role", "role", fmt.Sprintf("%s-role", serviceAccountName))
+	roleName := fmt.Sprintf("%s-role", serviceAccountName)
 	role := &rbacv1.Role{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      fmt.Sprintf("%s-role", serviceAccountName),
+			Name:      roleName,
 			Namespace: sleepcycle.Namespace,
 		},
 		Rules: []rbacv1.PolicyRule{
 			{
-				APIGroups: []string{"", "apps", "batch", "core", "autoscaling"},
-				Resources: []string{"*"},
-				Verbs:     []string{"create", "get", "update", "delete", "list", "post"},
+				APIGroups: []string{""},
+				Resources: []string{"events"},
+				Verbs:     []string{"create", "patch"},
+			},
+			{
+				APIGroups: []string{"apps"},
+				Resources: []string{"deployments", "replicasets", "statefulsets"},
+				Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+			},
+			{
+				APIGroups: []string{"batch"},
+				Resources: []string{"cronjobs"},
+				Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+			},
+			{
+				APIGroups: []string{"autoscaling"},
+				Resources: []string{"horizontalpodautoscalers"},
+				Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
 			},
 		},
 	}
@@ -92,7 +108,7 @@ func (r *SleepCycleReconciler) reconcileRbac(ctx context.Context, sleepcycle *co
 		return err
 	}
 
-	r.logger.Info("creating cluster role binding", "role", fmt.Sprintf("%s-rolebinding", serviceAccountName))
+	r.logger.Info("creating role binding", "role", fmt.Sprintf("%s-rolebinding", serviceAccountName))
 	roleBinding := &rbacv1.RoleBinding{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      fmt.Sprintf("%s-rolebinding", serviceAccountName),
@@ -101,7 +117,7 @@ func (r *SleepCycleReconciler) reconcileRbac(ctx context.Context, sleepcycle *co
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: rbacv1.GroupName,
 			Kind:     "Role",
-			Name:     fmt.Sprintf("%s-role", serviceAccountName),
+			Name:     roleName,
 		},
 		Subjects: []rbacv1.Subject{
 			{
@@ -117,6 +133,6 @@ func (r *SleepCycleReconciler) reconcileRbac(ctx context.Context, sleepcycle *co
 		return err
 	}
 
-	r.recordEvent(sleepcycle, fmt.Sprintf("created rbac resources in %s", sleepcycle.Namespace), true)
+	r.recordEvent(sleepcycle, fmt.Sprintf("created rbac resources in %s", sleepcycle.Namespace), false)
 	return nil
 }

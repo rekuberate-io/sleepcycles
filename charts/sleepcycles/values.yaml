@@ -32,7 +32,7 @@ controllerManager:
         - ALL
     image:
       repository: akyriako78/rekuberate-io-sleepcycles
-      tag: 0.2.1
+      tag: 0.2.3
     resources:
       limits:
         cpu: 500m

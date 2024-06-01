@@ -124,7 +124,7 @@ func (r *SleepCycleReconciler) createCronJob(
 								},
 							},
 							RestartPolicy:      v1.RestartPolicyOnFailure,
-							ServiceAccountName: "rekuberate-runner",
+							ServiceAccountName: serviceAccountName,
 						},
 					},
 					BackoffLimit: &backOffLimit,
