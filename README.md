@@ -124,7 +124,10 @@ The diagram below describes how `rekuberate.io/sleepcycles` are dealing with sch
 
 You can combine `rekuberate.io/sleepcycles` with applications provisioned with [ArgoCD](https://argoproj.github.io/cd/), 
 **as long as** you disable [self-healing](https://argo-cd.readthedocs.io/en/stable/user-guide/auto_sync/#automatic-self-healing) 
-when an automatic sync policy is enabled:
+when an automatic sync policy is enabled, otherwise ArgoCD's sync mechanism will operate antagonistically towards the 
+shutdown and wakeup cronjobs. In this case ArgoCD will always automatically revert to the state described in the 
+git manifests and practically will cancel the effect of the sleepcycle schedule. An ArgoCD application with Manual or 
+Automatic sync policy **without** self-healing will work as expected.
 
 ![Screenshot from 2024-06-01 14-00-23.png](docs/images/argocd.png)
 
