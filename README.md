@@ -16,9 +16,6 @@ in that way you can:
 You’ll need a Kubernetes cluster to run against. You can use [KIND](https://sigs.k8s.io/kind) or [K3D](https://k3d.io) to get a local cluster for testing, 
 or run against a remote cluster. 
 
-> [!CAUTION]
-> Minimum required Kubernetes version is **1.25** 
-
 ### Samples
 
 Under `config/samples` you will find a set manifests that you can use to test this sleepcycles on your cluster:
