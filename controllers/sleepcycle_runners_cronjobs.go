@@ -47,20 +47,13 @@ func (r *SleepCycleReconciler) createCronJob(
 	targetKind string,
 	targetMeta metav1.ObjectMeta,
 	targetReplicas int32,
-	isShutdownOp bool,
+	opCode OpCode,
 ) (*batchv1.CronJob, error) {
-
 	logger.Info("creating runner", "cronjob", cronObjectKey)
 	backOffLimit := int32(0)
 
-	schedule := sleepcycle.Spec.Shutdown
-	tz := sleepcycle.Spec.ShutdownTimeZone
 	suspend := !sleepcycle.Spec.Enabled
-
-	if !isShutdownOp {
-		schedule = *sleepcycle.Spec.WakeUp
-		tz = sleepcycle.Spec.WakeupTimeZone
-	}
+	schedule, tz := r.getSchedule(opCode, sleepcycle)
 
 	labels := make(map[string]string)
 	labels[OwnedBy] = fmt.Sprintf("%s", sleepcycle.Name)
@@ -199,13 +192,9 @@ func (r *SleepCycleReconciler) reconcileCronJob(
 	targetKind string,
 	targetMeta metav1.ObjectMeta,
 	targetReplicas int32,
-	isShutdownOp bool,
+	opCode OpCode,
 ) error {
-	suffix := "shutdown"
-	if !isShutdownOp {
-		suffix = "wakeup"
-	}
-
+	suffix := opCode.String()
 	cronObjectKey := client.ObjectKey{
 		Name:      fmt.Sprintf("%s-%s-%s", sleepcycle.Name, targetMeta.Name, suffix),
 		Namespace: sleepcycle.Namespace,
@@ -217,7 +206,7 @@ func (r *SleepCycleReconciler) reconcileCronJob(
 	}
 
 	if cronjob == nil {
-		_, err := r.createCronJob(ctx, logger, sleepcycle, cronObjectKey, targetKind, targetMeta, targetReplicas, isShutdownOp)
+		_, err := r.createCronJob(ctx, logger, sleepcycle, cronObjectKey, targetKind, targetMeta, targetReplicas, opCode)
 		if err != nil {
 			return err
 		}
@@ -228,20 +217,15 @@ func (r *SleepCycleReconciler) reconcileCronJob(
 			return nil
 		}
 
-		if !isShutdownOp && sleepcycle.Spec.WakeUp == nil {
+		if opCode != Shutdown && (sleepcycle.Spec.WakeUp == nil && sleepcycle.Spec.Terminate == nil) {
 			err := r.deleteCronJob(ctx, sleepcycle, cronjob)
 			if err != nil {
 				return err
 			}
 		}
 
-		schedule := sleepcycle.Spec.Shutdown
-		tz := sleepcycle.Spec.ShutdownTimeZone
 		suspend := !sleepcycle.Spec.Enabled
-		if !isShutdownOp {
-			schedule = *sleepcycle.Spec.WakeUp
-			tz = sleepcycle.Spec.WakeupTimeZone
-		}
+		schedule, tz := r.getSchedule(opCode, sleepcycle)
 
 		err := r.updateCronJob(ctx, logger, sleepcycle, cronjob, targetKind, schedule, *tz, suspend, targetReplicas)
 		if err != nil {
@@ -253,6 +237,25 @@ func (r *SleepCycleReconciler) reconcileCronJob(
 	return nil
 }
 
+func (r *SleepCycleReconciler) getSchedule(opCode OpCode, sleepcycle *corev1alpha1.SleepCycle) (string, *string) {
+	var schedule string
+	var tz *string
+
+	switch opCode {
+	case Terminate:
+		schedule = *sleepcycle.Spec.Terminate
+		tz = sleepcycle.Spec.Terminate
+	case Wakeup:
+		schedule = *sleepcycle.Spec.WakeUp
+		tz = sleepcycle.Spec.WakeupTimeZone
+	case Shutdown:
+		schedule = sleepcycle.Spec.Shutdown
+		tz = sleepcycle.Spec.ShutdownTimeZone
+	}
+
+	return schedule, tz
+}
+
 func (r *SleepCycleReconciler) reconcile(
 	ctx context.Context,
 	logger logr.Logger,
@@ -261,13 +264,20 @@ func (r *SleepCycleReconciler) reconcile(
 	targetMeta metav1.ObjectMeta,
 	targetReplicas int32,
 ) error {
-	err := r.reconcileCronJob(ctx, logger, sleepcycle, targetKind, targetMeta, targetReplicas, true)
+	err := r.reconcileCronJob(ctx, logger, sleepcycle, targetKind, targetMeta, targetReplicas, Shutdown)
 	if err != nil {
 		return err
 	}
 
 	if sleepcycle.Spec.WakeUp != nil {
-		err := r.reconcileCronJob(ctx, logger, sleepcycle, targetKind, targetMeta, targetReplicas, false)
+		err := r.reconcileCronJob(ctx, logger, sleepcycle, targetKind, targetMeta, targetReplicas, Wakeup)
+		if err != nil {
+			return err
+		}
+	}
+
+	if sleepcycle.Spec.Terminate != nil {
+		err := r.reconcileCronJob(ctx, logger, sleepcycle, targetKind, targetMeta, targetReplicas, Terminate)
 		if err != nil {
 			return err
 		}

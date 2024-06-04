@@ -41,6 +41,14 @@ type SleepCycleSpec struct {
 	// +kubebuilder:default:="UTC"
 	WakeupTimeZone *string `json:"wakeupTimeZone,omitempty"`
 
+	// +kubebuilder:validation:Pattern:=`(^((\*\/)?([0-5]?[0-9])((\,|\-|\/)([0-5]?[0-9]))*|\*)\s+((\*\/)?((2[0-3]|1[0-9]|[0-9]|00))((\,|\-|\/)(2[0-3]|1[0-9]|[0-9]|00))*|\*)\s+((\*\/)?([1-9]|[12][0-9]|3[01])((\,|\-|\/)([1-9]|[12][0-9]|3[01]))*|\*)\s+((\*\/)?([1-9]|1[0-2])((\,|\-|\/)([1-9]|1[0-2]))*|\*|(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|des))\s+((\*\/)?[0-6]((\,|\-|\/)[0-6])*|\*|00|(sun|mon|tue|wed|thu|fri|sat))\s*$)|@(annually|yearly|monthly|weekly|daily|hourly|reboot)`
+	// +kubebuilder:validation:Type=string
+	Terminate *string `json:"terminate,omitempty"`
+
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:default:="UTC"
+	TerminateTimeZone *string `json:"terminateTimeZone,omitempty"`
+
 	// +kubebuilder:validation:default:=true
 	// +kubebuilder:validation:Type=boolean
 	Enabled bool `json:"enabled"`
@@ -86,6 +94,8 @@ type SleepCycleStatus struct {
 // +kubebuilder:printcolumn:name="Shutdown Timezone",type=string,JSONPath=`.spec.shutdownTimeZone`
 // +kubebuilder:printcolumn:name="Wakeup Schedule",type=string,JSONPath=`.spec.wakeup`
 // +kubebuilder:printcolumn:name="Wakeup Timezone",type=string,JSONPath=`.spec.wakeupTimeZone`
+// +kubebuilder:printcolumn:name="Terminate Schedule",type=string,JSONPath=`.spec.terminate`
+// +kubebuilder:printcolumn:name="Terminate Timezone",type=string,JSONPath=`.spec.terminateTimeZone`
 type SleepCycle struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
