@@ -54,19 +54,16 @@ func main() {
 	pd, ok := os.LookupEnv(podEnvVar)
 	if !ok {
 		logger.Error(fmt.Errorf(envVarErr, podEnvVar), "failed to load environment variable")
-		//os.Exit(78)
 	}
 
 	ns, ok := os.LookupEnv(namespaceEnvVar)
 	if !ok {
 		logger.Error(fmt.Errorf(envVarErr, namespaceEnvVar), "failed to load environment variable")
-		//os.Exit(78)
 	}
 
 	cj, ok := os.LookupEnv(cronjobEnvVar)
 	if !ok {
 		logger.Error(fmt.Errorf(envVarErr, cronjobEnvVar), "failed to load environment variable")
-		//os.Exit(78)
 	}
 
 	logger.Info("starting runner", "namespace", ns, "cronjob", cj, "pod", pd)
@@ -93,11 +90,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	isShutdownOp := true
-	if !strings.HasSuffix(cronjob.Name, "shutdown") {
-		isShutdownOp = false
-	}
-
+	opCode := getOpCode(cronjob.Name)
 	target := cronjob.Labels["rekuberate.io/target"]
 	kind := cronjob.Labels["rekuberate.io/target-kind"]
 
@@ -116,7 +109,7 @@ func main() {
 			logger.Error(err, "runner failed", "target", target, "kind", kind)
 		} else {
 			action := "up"
-			if isShutdownOp {
+			if opCode == 0 {
 				action = "down"
 			}
 			recordEvent(cronjob, fmt.Sprintf("runner scaled %s %s", action, target), false)
@@ -322,4 +315,42 @@ func recordEvent(cronjob *batchv1.CronJob, message string, isError bool) {
 
 	eventRecorder.Event(cronjob, eventType, reason, strings.ToLower(message))
 	time.Sleep(2 * time.Second)
+}
+
+type OpCode int
+
+const (
+	Terminate OpCode = iota - 1
+	Shutdown
+	Wakeup
+)
+
+func (o OpCode) String() string {
+	suffix := "shutdown"
+	switch o {
+	case Terminate:
+		suffix = "terminate"
+	case Wakeup:
+		suffix = "wakeup"
+	case Shutdown:
+		suffix = "shutdown"
+	}
+
+	return suffix
+}
+
+func getOpCode(cronJobName string) OpCode {
+	if strings.HasSuffix(cronJobName, "terminate") {
+		return Terminate
+	}
+
+	if strings.HasSuffix(cronJobName, "shutdown") {
+		return Shutdown
+	}
+
+	if strings.HasSuffix(cronJobName, "wakeup") {
+		return Wakeup
+	}
+
+	return Wakeup
 }
