@@ -244,7 +244,7 @@ func (r *SleepCycleReconciler) getSchedule(opCode OpCode, sleepcycle *corev1alph
 	switch opCode {
 	case Terminate:
 		schedule = *sleepcycle.Spec.Terminate
-		tz = sleepcycle.Spec.Terminate
+		tz = sleepcycle.Spec.TerminateTimeZone
 	case Wakeup:
 		schedule = *sleepcycle.Spec.WakeUp
 		tz = sleepcycle.Spec.WakeupTimeZone

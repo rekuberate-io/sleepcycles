@@ -9,6 +9,7 @@ import (
 	"go.uber.org/zap/zapcore"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+	errorsv1 "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes"
@@ -103,54 +104,50 @@ func main() {
 	}
 
 	if err == nil {
-		err := run(ns, cronjob, target, kind, replicas, isShutdownOp)
+		err := run(ns, cronjob, target, kind, replicas, opCode)
 		if err != nil {
 			recordEvent(cronjob, err.Error(), true)
 			logger.Error(err, "runner failed", "target", target, "kind", kind)
 		} else {
-			action := "up"
-			if opCode == 0 {
-				action = "down"
-			}
-			recordEvent(cronjob, fmt.Sprintf("runner scaled %s %s", action, target), false)
+			recordEvent(cronjob, fmt.Sprintf("runner completed op=%s", opCode.String()), false)
 		}
 	}
 }
 
-func run(ns string, cronjob *batchv1.CronJob, target string, kind string, targetReplicas int64, shutdown bool) error {
+func run(ns string, cronjob *batchv1.CronJob, target string, kind string, targetReplicas int64, opCode OpCode) error {
 	smsg := "scaling failed"
 	var serr error
 
 	switch kind {
 	case "Deployment":
-		if shutdown {
+		if opCode == 0 {
 			targetReplicas = 0
 		}
-		err := scaleDeployment(ctx, ns, cronjob, target, int32(targetReplicas))
+		err := scaleDeployment(ctx, ns, cronjob, target, int32(targetReplicas), opCode)
 		if err != nil {
 			serr = errors.Wrap(err, smsg)
 		}
 	case "StatefulSet":
-		if shutdown {
+		if opCode == 0 {
 			targetReplicas = 0
 		}
-		err := scaleStatefulSets(ctx, ns, cronjob, target, int32(targetReplicas))
+		err := scaleStatefulSets(ctx, ns, cronjob, target, int32(targetReplicas), opCode)
 		if err != nil {
 			serr = errors.Wrap(err, smsg)
 		}
 	case "CronJob":
-		if shutdown {
+		if opCode == 0 {
 			targetReplicas = 0
 		}
-		err := scaleCronJob(ctx, ns, cronjob, target, int32(targetReplicas))
+		err := scaleCronJob(ctx, ns, cronjob, target, int32(targetReplicas), opCode)
 		if err != nil {
 			serr = errors.Wrap(err, smsg)
 		}
 	case "HorizontalPodAutoscaler":
-		if shutdown {
+		if opCode == 0 {
 			targetReplicas = 1
 		}
-		err := scaleHorizontalPodAutoscalers(ctx, ns, cronjob, target, int32(targetReplicas))
+		err := scaleHorizontalPodAutoscalers(ctx, ns, cronjob, target, int32(targetReplicas), opCode)
 		if err != nil {
 			serr = errors.Wrap(err, smsg)
 		}
@@ -178,10 +175,31 @@ func syncReplicas(ctx context.Context, namespace string, cronjob *batchv1.CronJo
 	return nil
 }
 
-func scaleDeployment(ctx context.Context, namespace string, cronjob *batchv1.CronJob, target string, targetReplicas int32) error {
+func scaleDeployment(ctx context.Context, namespace string, cronjob *batchv1.CronJob, target string, targetReplicas int32, opCode OpCode) error {
 	deployment, err := clientSet.AppsV1().Deployments(namespace).Get(ctx, target, metav1.GetOptions{})
 	if err != nil {
+		if errorsv1.IsNotFound(err) {
+			recordEvent(cronjob, "terminating parent cron job", false)
+			err := clientSet.BatchV1().CronJobs(namespace).Delete(ctx, cronjob.Name, metav1.DeleteOptions{})
+			if err != nil {
+				return err
+			}
+
+			return nil
+		}
+
 		return err
+	}
+
+	if opCode < 0 {
+		err := clientSet.AppsV1().Deployments(namespace).Delete(ctx, target, metav1.DeleteOptions{})
+		if err != nil {
+			return err
+		}
+
+		logger.Info("terminated workload", "namespace", namespace, "deployment", target)
+
+		return nil
 	}
 
 	currentReplicas := *deployment.Spec.Replicas
@@ -197,24 +215,42 @@ func scaleDeployment(ctx context.Context, namespace string, cronjob *batchv1.Cro
 			return err
 		}
 
-		action := "down"
-		if targetReplicas > 0 {
-			action = "up"
-		}
-
-		logger.Info(fmt.Sprintf("scaled %s deployment", action), "namespace", namespace, "deployment", target, "replicas", targetReplicas)
+		logger.Info(getLogTrace(opCode, false), "namespace", namespace, "deployment", target, "replicas", targetReplicas)
 		return nil
 	}
 
-	logger.Info("deployment already in desired state", "namespace", namespace, "deployment", target, "replicas", targetReplicas)
+	msg := "deployment already in desired state"
+	if opCode < 0 {
+		msg = "terminated referenced deployment"
+	}
+
+	logger.Info(msg, "namespace", namespace, "deployment", target, "replicas", targetReplicas)
 
 	return nil
 }
 
-func scaleCronJob(ctx context.Context, namespace string, cronjob *batchv1.CronJob, target string, targetReplicas int32) error {
+func scaleCronJob(ctx context.Context, namespace string, cronjob *batchv1.CronJob, target string, targetReplicas int32, opCode OpCode) error {
 	cj, err := clientSet.BatchV1().CronJobs(namespace).Get(ctx, target, metav1.GetOptions{})
 	if err != nil {
-		return err
+		if errorsv1.IsNotFound(err) {
+			recordEvent(cronjob, "terminating parent cron job", false)
+			err := clientSet.BatchV1().CronJobs(namespace).Delete(ctx, cronjob.Name, metav1.DeleteOptions{})
+			if err != nil {
+				return err
+			}
+
+			return nil
+		}
+	}
+
+	if opCode < 0 {
+		err := clientSet.BatchV1().CronJobs(namespace).Delete(ctx, target, metav1.DeleteOptions{})
+		if err != nil {
+			return err
+		}
+
+		logger.Info("terminated workload", "namespace", namespace, "cronjob", target)
+		return nil
 	}
 
 	suspend := targetReplicas <= 0
@@ -225,23 +261,41 @@ func scaleCronJob(ctx context.Context, namespace string, cronjob *batchv1.CronJo
 			return err
 		}
 
-		action := "resumed"
-		if suspend {
-			action = "suspended"
-		}
-
-		logger.Info(fmt.Sprintf("cronjob %s", action), "namespace", namespace, "cronjob", target)
+		logger.Info(getLogTrace(opCode, true), "namespace", namespace, "cronjob", target)
 		return nil
 	}
 
-	logger.Info("cronjob already in desired state", "namespace", namespace, "cronjob", target, "suspended", suspend)
+	msg := "cronjob already in desired state"
+	if opCode < 0 {
+		msg = "terminated referenced cronjob"
+	}
+
+	logger.Info(msg, "namespace", namespace, "cronjob", target, "suspended", suspend)
 	return nil
 }
 
-func scaleStatefulSets(ctx context.Context, namespace string, cronjob *batchv1.CronJob, target string, targetReplicas int32) error {
+func scaleStatefulSets(ctx context.Context, namespace string, cronjob *batchv1.CronJob, target string, targetReplicas int32, opCode OpCode) error {
 	statefulSet, err := clientSet.AppsV1().StatefulSets(namespace).Get(ctx, target, metav1.GetOptions{})
 	if err != nil {
-		return err
+		if errorsv1.IsNotFound(err) {
+			recordEvent(cronjob, "terminating parent cron job", false)
+			err := clientSet.BatchV1().CronJobs(namespace).Delete(ctx, cronjob.Name, metav1.DeleteOptions{})
+			if err != nil {
+				return err
+			}
+
+			return nil
+		}
+	}
+
+	if opCode < 0 {
+		err := clientSet.AppsV1().StatefulSets(namespace).Delete(ctx, target, metav1.DeleteOptions{})
+		if err != nil {
+			return err
+		}
+
+		logger.Info("terminated workload", "namespace", namespace, "statefulset", target)
+		return nil
 	}
 
 	currentReplicas := *statefulSet.Spec.Replicas
@@ -257,24 +311,41 @@ func scaleStatefulSets(ctx context.Context, namespace string, cronjob *batchv1.C
 			return err
 		}
 
-		action := "down"
-		if targetReplicas > 0 {
-			action = "up"
-		}
-
-		logger.Info(fmt.Sprintf("scaled %s statefulset", action), "namespace", namespace, "statefulset", target, "replicas", targetReplicas)
+		logger.Info(getLogTrace(opCode, false), "namespace", namespace, "statefulset", target, "replicas", targetReplicas)
 		return nil
 	}
 
-	logger.Info("statefulset already in desired state", "namespace", namespace, "statefulset", target, "replicas", targetReplicas)
+	msg := "statefulset already in desired state"
+	if opCode < 0 {
+		msg = "terminated referenced cronjob"
+	}
 
+	logger.Info(msg, "namespace", namespace, "statefulset", target, "replicas", targetReplicas)
 	return nil
 }
 
-func scaleHorizontalPodAutoscalers(ctx context.Context, namespace string, cronjob *batchv1.CronJob, target string, targetReplicas int32) error {
+func scaleHorizontalPodAutoscalers(ctx context.Context, namespace string, cronjob *batchv1.CronJob, target string, targetReplicas int32, opCode OpCode) error {
 	hpa, err := clientSet.AutoscalingV1().HorizontalPodAutoscalers(namespace).Get(ctx, target, metav1.GetOptions{})
 	if err != nil {
-		return err
+		if errorsv1.IsNotFound(err) {
+			recordEvent(cronjob, "terminating parent cron job", false)
+			err := clientSet.BatchV1().CronJobs(namespace).Delete(ctx, cronjob.Name, metav1.DeleteOptions{})
+			if err != nil {
+				return err
+			}
+
+			return nil
+		}
+	}
+
+	if opCode < 0 {
+		err := clientSet.AutoscalingV1().HorizontalPodAutoscalers(namespace).Delete(ctx, target, metav1.DeleteOptions{})
+		if err != nil {
+			return err
+		}
+
+		logger.Info("terminated workload", "namespace", namespace, "hpa", target)
+		return nil
 	}
 
 	currentReplicas := hpa.Spec.MaxReplicas
@@ -290,12 +361,7 @@ func scaleHorizontalPodAutoscalers(ctx context.Context, namespace string, cronjo
 			return err
 		}
 
-		action := "down"
-		if targetReplicas > 0 {
-			action = "up"
-		}
-
-		logger.Info(fmt.Sprintf("scaled max replicas %s", action), "namespace", namespace, "hpa", target, "replicas", targetReplicas)
+		logger.Info(getLogTrace(opCode, false), "namespace", namespace, "hpa", target, "replicas", targetReplicas)
 		return nil
 	}
 
@@ -337,6 +403,24 @@ func (o OpCode) String() string {
 	}
 
 	return suffix
+}
+
+func getLogTrace(opCode OpCode, isCronJob bool) string {
+	if opCode < 0 {
+		return "terminated referenced workload"
+	}
+
+	if opCode == 0 {
+		if isCronJob {
+			return "suspended cron job"
+		}
+		return "scaled down max replicas"
+	}
+
+	if isCronJob {
+		return "resumed cron job"
+	}
+	return "scaled up max replicas"
 }
 
 func getOpCode(cronJobName string) OpCode {
