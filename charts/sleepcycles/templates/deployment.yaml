@@ -64,3 +64,11 @@ spec:
         runAsNonRoot: true
       serviceAccountName: {{ include "sleepcycles.fullname" . }}-controller-manager
       terminationGracePeriodSeconds: 10
+      {{- if .Values.controllerManager.nodeSelector }}
+      nodeSelector:
+{{ toYaml .Values.controllerManager.nodeSelector | indent 8 }}
+      {{- end }}
+      {{- if .Values.controllerManager.tolerations }}
+      tolerations:
+{{ toYaml .Values.controllerManager.tolerations | indent 8 }}
+      {{- end }}

@@ -41,6 +41,8 @@ controllerManager:
         cpu: 10m
         memory: 64Mi
   replicas: 1
+  nodeSelector: {}
+  tolerations: []
   serviceAccount:
     annotations: {}
 kubernetesClusterDomain: cluster.local
