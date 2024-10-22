@@ -9,13 +9,15 @@ import (
 	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"math/rand"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"strconv"
 )
 
 var (
-	startingDeadlineSeconds int64 = 15
+	startingDeadlineSeconds int64  = 15
+	letterBytes             string = "abcdefghijklmnopqrstuvwxyz"
 )
 
 const (
@@ -61,6 +63,12 @@ func (r *SleepCycleReconciler) createCronJob(
 		schedule = *sleepcycle.Spec.WakeUp
 		tz = sleepcycle.Spec.WakeupTimeZone
 	}
+
+	bytes := make([]byte, 10)
+	for i := range bytes {
+		bytes[i] = letterBytes[rand.Intn(len(letterBytes))]
+	}
+	cronObjectKey.Name = cronObjectKey.Name[:40] + string(bytes)
 
 	labels := make(map[string]string)
 	labels[OwnedBy] = fmt.Sprintf("%s", sleepcycle.Name)
