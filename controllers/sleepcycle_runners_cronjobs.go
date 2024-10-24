@@ -7,11 +7,11 @@ import (
 	corev1alpha1 "github.com/rekuberate-io/sleepcycles/api/v1alpha1"
 	batchv1 "k8s.io/api/batch/v1"
 	v1 "k8s.io/api/core/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"strconv"
+	"strings"
 )
 
 var (
@@ -26,17 +26,28 @@ const (
 	Replicas       = "rekuberate.io/replicas"
 )
 
-func (r *SleepCycleReconciler) getCronJob(ctx context.Context, objKey client.ObjectKey) (*batchv1.CronJob, error) {
-	var job batchv1.CronJob
-	if err := r.Get(ctx, objKey, &job); err != nil {
-		if apierrors.IsNotFound(err) {
-			return nil, nil
-		}
+func (r *SleepCycleReconciler) getCronJob(ctx context.Context, ownedBy, target, namespace, suffix string) (*batchv1.CronJob, error) {
+	var jobs batchv1.CronJobList
+	labelSelector := map[string]string{
+		OwnedBy: ownedBy,
+		Target:  target,
+	}
+	listOptions := []client.ListOption{
+		client.InNamespace(namespace),
+		client.MatchingLabels(labelSelector),
+	}
 
+	if err := r.List(ctx, &jobs, listOptions...); err != nil {
 		return nil, err
 	}
 
-	return &job, nil
+	for _, job := range jobs.Items {
+		if strings.Contains(job.Name, suffix) {
+			return &job, nil
+		}
+	}
+
+	return nil, nil
 }
 
 func (r *SleepCycleReconciler) createCronJob(
@@ -206,18 +217,19 @@ func (r *SleepCycleReconciler) reconcileCronJob(
 		suffix = "wakeup"
 	}
 
-	cronObjectKey := client.ObjectKey{
-		Name:      fmt.Sprintf("%s-%s-%s", sleepcycle.Name, targetMeta.Name, suffix),
-		Namespace: sleepcycle.Namespace,
-	}
-	cronjob, err := r.getCronJob(ctx, cronObjectKey)
+	cronjob, err := r.getCronJob(ctx, sleepcycle.Name, targetMeta.Name, sleepcycle.Namespace, suffix)
 	if err != nil {
-		logger.Error(err, "unable to fetch runner", "cronjob", cronObjectKey.Name)
+		logger.Error(err, "unable to fetch runner", "sleepcycle", sleepcycle.Name, "target", targetMeta.Namespace, "op", suffix)
 		return err
 	}
 
 	if cronjob == nil {
-		_, err := r.createCronJob(ctx, logger, sleepcycle, cronObjectKey, targetKind, targetMeta, targetReplicas, isShutdownOp)
+		cronObjectKey := client.ObjectKey{
+			Name:      fmt.Sprintf("sleepcycle-runner-%s%s-%s", sleepcycle.ObjectMeta.UID[:4], targetMeta.UID[:4], suffix),
+			Namespace: sleepcycle.Namespace,
+		}
+
+		_, err = r.createCronJob(ctx, logger, sleepcycle, cronObjectKey, targetKind, targetMeta, targetReplicas, isShutdownOp)
 		if err != nil {
 			return err
 		}
@@ -245,7 +257,7 @@ func (r *SleepCycleReconciler) reconcileCronJob(
 
 		err := r.updateCronJob(ctx, logger, sleepcycle, cronjob, targetKind, schedule, *tz, suspend, targetReplicas)
 		if err != nil {
-			logger.Error(err, "failed to update runner", "name", cronObjectKey.Name)
+			logger.Error(err, "failed to update runner", "sleepcycle", sleepcycle.Name, "target", targetMeta.Namespace, "op", suffix)
 			return err
 		}
 	}
