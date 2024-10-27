@@ -145,11 +145,12 @@ IMG_NAME ?= rekuberate-io-sleepcycles
 DOCKER_HUB_NAME ?= $(shell docker info | sed '/Username:/!d;s/.* //')
 IMG ?= $(DOCKER_HUB_NAME)/$(IMG_NAME):$(IMG_TAG)
 RUNNERS_IMG_NAME ?= rekuberate-io-sleepcycles-runners
-KO_DOCKER_REPO ?= $(DOCKER_HUB_NAME)/$(RUNNERS_IMG_NAME)
+KO_DOCKER_REPO_SLEEPCYCLE = $(DOCKER_HUB_NAME)/$(IMG_NAME)
+KO_DOCKER_REPO_RUNNER ?= $(DOCKER_HUB_NAME)/$(RUNNERS_IMG_NAME)
 ```
 
 ```sh
-make docker-build docker-push
+make ko-build-sleepcycles PUSH=true
 ```
 
 2. Deploy the controller to the cluster using the image defined in `IMG`:

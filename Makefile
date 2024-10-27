@@ -1,12 +1,21 @@
 
 # Image URL to use all building/pushing image targets
 #IMG_TAG ?= $(shell git rev-parse --short HEAD)
-IMG_TAG ?= 0.2.5
+IMG_TAG ?= 0.2.6
 IMG_NAME ?= rekuberate-io-sleepcycles
 DOCKER_HUB_NAME ?= $(shell docker info | sed '/Username:/!d;s/.* //')
 IMG ?= $(DOCKER_HUB_NAME)/$(IMG_NAME):$(IMG_TAG)
 RUNNERS_IMG_NAME ?= rekuberate-io-sleepcycles-runners
-KO_DOCKER_REPO = $(DOCKER_HUB_NAME)/$(RUNNERS_IMG_NAME)
+KO_DOCKER_REPO_SLEEPCYCLE = $(DOCKER_HUB_NAME)/$(IMG_NAME)
+KO_DOCKER_REPO_RUNNER = $(DOCKER_HUB_NAME)/$(RUNNERS_IMG_NAME)
+
+# Push flag (can be overridden via command line)
+# Usage: make ko-build-sleepcycles PUSH=true
+PUSH ?= false
+ifeq ($(PUSH), 1)
+PUSH_FLAG=--push
+endif
+
 # ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
 ENVTEST_K8S_VERSION = 1.24.2
 
@@ -73,14 +82,6 @@ build: generate fmt vet ## Build manager binary.
 .PHONY: run
 run: manifests generate fmt vet ## Run a controller from your host.
 	go run ./main.go
-
-.PHONY: docker-build
-docker-build: test ## Build docker image with the manager.
-	docker build -t ${IMG} .
-
-.PHONY: docker-push
-docker-push: ## Push docker image with the manager.
-	docker push ${IMG}
 
 ##@ Deployment
 
@@ -155,5 +156,9 @@ ko: $(KO) ## Download ko locally if necessary.
 $(KO): $(LOCALBIN)
 	test -s $(LOCALBIN)/ko || GOBIN=$(LOCALBIN) go install github.com/google/ko@latest
 
+.PHONY: ko
+ko-build-sleepcycles: test ## Build docker image with the manager.
+	KO_DOCKER_REPO=KO_DOCKER_REPO_SLEEPCYCLE ko build --platform all --bare ${PUSH_FLAG} .
+
 ko-build-runner: ko
-	cd runners && ko build --bare .
+	cd runners && KO_DOCKER_REPO=KO_DOCKER_REPO_RUNNER ko build --platform all --bare ${PUSH_FLAG} .
