@@ -4,6 +4,11 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"os"
+	"strconv"
+	"strings"
+	"time"
+
 	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
 	"go.uber.org/zap/zapcore"
@@ -15,12 +20,8 @@ import (
 	typedv1core "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/record"
-	"os"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
-	"strconv"
-	"strings"
-	"time"
 )
 
 var (
@@ -171,10 +172,6 @@ func run(ns string, cronjob *batchv1.CronJob, target string, kind string, target
 
 func syncReplicas(ctx context.Context, namespace string, cronjob *batchv1.CronJob, currentReplicas int32, targetReplicas int32) error {
 	if currentReplicas != targetReplicas && currentReplicas > 0 {
-		if targetReplicas != 0 {
-			targetReplicas = currentReplicas
-		}
-
 		cronjob.Annotations["rekuberate.io/replicas"] = fmt.Sprint(currentReplicas)
 		_, err := clientSet.BatchV1().CronJobs(namespace).Update(ctx, cronjob, metav1.UpdateOptions{})
 		if err != nil {

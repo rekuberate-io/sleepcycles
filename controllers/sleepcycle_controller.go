@@ -19,6 +19,9 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"strings"
+	"time"
+
 	"github.com/go-logr/logr"
 	"github.com/hashicorp/go-multierror"
 	corev1alpha1 "github.com/rekuberate-io/sleepcycles/api/v1alpha1"
@@ -34,8 +37,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
-	"strings"
-	"time"
 )
 
 const (
@@ -60,12 +61,6 @@ type runtimeObjectReconciler func(
 	req ctrl.Request,
 	sleepcycle *corev1alpha1.SleepCycle,
 ) (int, int, error)
-
-type runtimeObjectFinalizer func(
-	ctx context.Context,
-	req ctrl.Request,
-	original *corev1alpha1.SleepCycle,
-) (ctrl.Result, error)
 
 var (
 	eventFilters = builder.WithPredicates(predicate.Funcs{
@@ -197,23 +192,6 @@ func (r *SleepCycleReconciler) UpdateStatus(ctx context.Context, sleepcycle *cor
 
 	return nil
 }
-
-//if !original.Spec.Enabled {
-//	return ctrl.Result{}, nil
-//}
-//desired := *original.DeepCopy()
-//reconcilers := []runtimeObjectReconciler{r.ReconcileDeployments, r.ReconcileCronJobs, r.ReconcileStatefulSets, r.ReconcileHorizontalPodAutoscalers}
-
-//r.logger = r.logger.WithValues("op", currentOperation.String())
-//tz := r.getTimeZone(original.Spec.ShutdownTimeZone)
-//t := nextScheduledShutdown.In(tz)
-//desired.Status.NextScheduledShutdownTime = &metav1.Time{Time: t}
-
-//if err := r.Status().Update(ctx, &desired); err != nil {
-//	r.logger.Error(err, fmt.Sprintf("🛑️ %s", SleepCycleStatusUpdateFailure), "sleepcycle", sleepCycleFullName)
-//	r.Recorder.Event(&original, corev1.EventTypeWarning, "SleepCycleStatus", strings.ToLower(SleepCycleStatusUpdateFailure))
-//	return ctrl.Result{}, err
-//}
 
 func (r *SleepCycleReconciler) ScaleDeployment(ctx context.Context, deployment appsv1.Deployment, replicas int32) error {
 	deepCopy := *deployment.DeepCopy()

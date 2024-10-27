@@ -1,12 +1,13 @@
 package controllers
 
 import (
+	"crypto/rand"
 	"encoding/base64"
+	"strings"
+
 	corev1alpha1 "github.com/rekuberate-io/sleepcycles/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"math/rand"
-	"strings"
 )
 
 func (r *SleepCycleReconciler) hasLabel(obj *metav1.ObjectMeta, tag string) bool {
