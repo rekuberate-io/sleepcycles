@@ -140,16 +140,25 @@ Automatic sync policy **without** self-healing will work as expected.
 
 ```shell
 # Image URL to use all building/pushing image targets
+DOCKER_HUB_NAME ?= $(shell docker info | sed '/Username:/!d;s/.* //')
+# sleepcycles
 IMG_TAG ?= $(shell git rev-parse --short HEAD)
 IMG_NAME ?= rekuberate-io-sleepcycles
-DOCKER_HUB_NAME ?= $(shell docker info | sed '/Username:/!d;s/.* //')
 IMG ?= $(DOCKER_HUB_NAME)/$(IMG_NAME):$(IMG_TAG)
+# runners
 RUNNERS_IMG_NAME ?= rekuberate-io-sleepcycles-runners
-KO_DOCKER_REPO ?= $(DOCKER_HUB_NAME)/$(RUNNERS_IMG_NAME)
+RUNNERS_IMG ?= $(DOCKER_HUB_NAME)/$(RUNNERS_IMG_NAME)
+# targets
+PLATFORMS ?= linux/arm64,linux/amd64,linux/s390x,linux/ppc64le
+# CONTAINER_TOOL defines the container tool to be used for building images.
+# Be aware that the target commands are only tested with Docker which is
+# scaffolded by default. However, you might want to replace it to use other
+# tools. (i.e. podman)
+CONTAINER_TOOL ?= docker
 ```
 
 ```sh
-make docker-build docker-push
+make docker-buildx
 ```
 
 2. Deploy the controller to the cluster using the image defined in `IMG`:
@@ -258,7 +267,7 @@ make run
 You always need to build a new docker container and push it to your repository:
 
 ```sh
-make docker-build docker-push
+make docker-buildx 
 ```
 
 > [!IMPORTANT]
@@ -268,12 +277,23 @@ make docker-build docker-push
 
 #### Build
 
+Adjust the image and container registry name in `Makefile`:
+
+```shell
+# runners
+RUNNERS_IMG_NAME ?= rekuberate-io-sleepcycles-runners
+RUNNERS_IMG ?= $(DOCKER_HUB_NAME)/$(RUNNERS_IMG_NAME)
+```
+
+and then build and push the new image to the registry:
+
 ```sh
-make ko-build-runner
+make docker-buildx-runner
 ```
 
 > [!IMPORTANT]
-> In this case you will need to adjust the `runnerImage` of your `SleepCycle` manifest to use your own Runner image.
+> In this case you will need to adjust the `runnerImage` of your `SleepCycle` manifest to use your own Runner image,
+> otherwise it defaults always to `akyriako78/rekuberate-io-sleepcycles-runners`
 
 ### Uninstall CRDs
 To delete the CRDs from the cluster:
