@@ -1,12 +1,22 @@
-
 # Image URL to use all building/pushing image targets
-#IMG_TAG ?= $(shell git rev-parse --short HEAD)
-IMG_TAG ?= 0.2.5
-IMG_NAME ?= rekuberate-io-sleepcycles
 DOCKER_HUB_NAME ?= $(shell docker info | sed '/Username:/!d;s/.* //')
+# sleepcycles
+IMG_TAG ?= 0.2.6
+#IMG_TAG ?= $(shell git rev-parse --short HEAD)
+IMG_NAME ?= rekuberate-io-sleepcycles
 IMG ?= $(DOCKER_HUB_NAME)/$(IMG_NAME):$(IMG_TAG)
+# runners
+#RUNNERS_IMAGE_TAG ?= 0.1.0-rc.1
 RUNNERS_IMG_NAME ?= rekuberate-io-sleepcycles-runners
-KO_DOCKER_REPO = $(DOCKER_HUB_NAME)/$(RUNNERS_IMG_NAME)
+RUNNERS_IMG ?= $(DOCKER_HUB_NAME)/$(RUNNERS_IMG_NAME)#:$(RUNNERS_IMAGE_TAG)
+# targets
+PLATFORMS ?= linux/arm64,linux/amd64,linux/s390x,linux/ppc64le
+# CONTAINER_TOOL defines the container tool to be used for building images.
+# Be aware that the target commands are only tested with Docker which is
+# scaffolded by default. However, you might want to replace it to use other
+# tools. (i.e. podman)
+CONTAINER_TOOL ?= docker
+
 # ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
 ENVTEST_K8S_VERSION = 1.24.2
 
@@ -82,6 +92,26 @@ docker-build: test ## Build docker image with the manager.
 docker-push: ## Push docker image with the manager.
 	docker push ${IMG}
 
+.PHONY: docker-buildx
+docker-buildx: test ## Build and push docker image for the manager for cross-platform support
+	# copy existing Dockerfile and insert --platform=${BUILDPLATFORM} into Dockerfile.cross, and preserve the original Dockerfile
+	sed -e '1 s/\(^FROM\)/FROM --platform=\$$\{BUILDPLATFORM\}/; t' -e ' 1,// s//FROM --platform=\$$\{BUILDPLATFORM\}/' Dockerfile > Dockerfile.cross
+	- $(CONTAINER_TOOL) buildx create --name sleepcycles-builder
+	$(CONTAINER_TOOL) buildx use sleepcycles-builder
+	- $(CONTAINER_TOOL) buildx build --push --platform=$(PLATFORMS) --tag ${IMG} -f Dockerfile.cross .
+	- $(CONTAINER_TOOL) buildx rm sleepcycles-builder
+	rm Dockerfile.cross
+
+.PHONY: docker-buildx-runner
+docker-buildx-runner: fmt vet ## Build and push docker image for the runner for cross-platform support
+	# copy existing Dockerfile and insert --platform=${BUILDPLATFORM} into Dockerfile.runners.cross, and preserve the original Dockerfile.runners
+	sed -e '1 s/\(^FROM\)/FROM --platform=\$$\{BUILDPLATFORM\}/; t' -e ' 1,// s//FROM --platform=\$$\{BUILDPLATFORM\}/' Dockerfile.runners > Dockerfile.runners.cross
+	- $(CONTAINER_TOOL) buildx create --name runners-builder
+	$(CONTAINER_TOOL) buildx use runners-builder
+	- $(CONTAINER_TOOL) buildx build --push --platform=$(PLATFORMS) --tag ${RUNNERS_IMG} -f Dockerfile.runners.cross .
+	- $(CONTAINER_TOOL) buildx rm runners-builder
+	rm Dockerfile.runners.cross
+
 ##@ Deployment
 
 ifndef ignore-not-found
@@ -147,13 +177,3 @@ $(HELMIFY): $(LOCALBIN)
 
 helm: manifests kustomize helmify
 	$(KUSTOMIZE) build config/default | $(HELMIFY) charts/sleepcycles
-
-KO ?= $(LOCALBIN)/ko
-
-.PHONY: ko
-ko: $(KO) ## Download ko locally if necessary.
-$(KO): $(LOCALBIN)
-	test -s $(LOCALBIN)/ko || GOBIN=$(LOCALBIN) go install github.com/google/ko@latest
-
-ko-build-runner: ko
-	cd runners && ko build --bare .

@@ -24,4 +24,5 @@ testbin/*
 *.swo
 *~
 
+*.cross
 kind.yaml
