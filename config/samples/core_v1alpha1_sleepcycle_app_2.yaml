@@ -9,4 +9,4 @@ spec:
   wakeup: "*/2 * * * *"
   wakeupTimeZone: "Europe/Dublin"
   enabled: true
-  runnerImage: akyriako78/rekuberate-io-sleepcycles-runners:0.2.0-rc.1
+  runnerImage: akyriako78/rekuberate-io-sleepcycles-runners:0.2.0-dev-3

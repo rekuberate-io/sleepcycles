@@ -352,6 +352,10 @@ func markParentCronJobForDeletion(ctx context.Context, cronjob *batchv1.CronJob)
 		return err
 	}
 
+	message := "runner marked cronjob for self-destruction. target workload not found"
+	logger.Info(message, "namespace", cronjob.Namespace, "cronjob", cronjob.Name)
+	recordEvent(cronjob, message, true)
+
 	return nil
 }
 
