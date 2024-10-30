@@ -224,8 +224,13 @@ func (r *SleepCycleReconciler) reconcileCronJob(
 	}
 
 	if cronjob == nil {
+		cronJobRandomUID, err := r.generateSecureRandomString(12)
+		if err != nil {
+			return err
+		}
+
 		cronObjectKey := client.ObjectKey{
-			Name:      fmt.Sprintf("sleepcycle-runner-%s%s-%s", sleepcycle.ObjectMeta.UID[:4], targetMeta.UID[:4], suffix),
+			Name:      fmt.Sprintf("sleepcycle-runner-%s-%s-%s", sleepcycle.ObjectMeta.UID[:4], strings.ToLower(cronJobRandomUID), suffix),
 			Namespace: sleepcycle.Namespace,
 		}
 

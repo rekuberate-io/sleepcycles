@@ -1,7 +1,7 @@
 # Image URL to use all building/pushing image targets
 DOCKER_HUB_NAME ?= $(shell docker info | sed '/Username:/!d;s/.* //')
 # sleepcycles
-IMG_TAG ?= 0.2.6
+IMG_TAG ?= 0.2.7
 #IMG_TAG ?= $(shell git rev-parse --short HEAD)
 IMG_NAME ?= rekuberate-io-sleepcycles
 IMG ?= $(DOCKER_HUB_NAME)/$(IMG_NAME):$(IMG_TAG)

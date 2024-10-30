@@ -1,13 +1,15 @@
 package controllers
 
 import (
+	"crypto/rand"
 	"encoding/base64"
 	corev1alpha1 "github.com/rekuberate-io/sleepcycles/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"math/rand"
 	"strings"
 )
+
+const letters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 
 func (r *SleepCycleReconciler) hasLabel(obj *metav1.ObjectMeta, tag string) bool {
 	val, ok := obj.GetLabels()[SleepCycleLabel]
@@ -29,6 +31,19 @@ func (r *SleepCycleReconciler) generateToken() (string, error) {
 
 	base64EncodedToken := base64.StdEncoding.EncodeToString(token)
 	return base64EncodedToken, nil
+}
+
+func (r *SleepCycleReconciler) generateSecureRandomString(length int) (string, error) {
+	result := make([]byte, length)
+	_, err := rand.Read(result)
+	if err != nil {
+		return "", err
+	}
+
+	for i := range result {
+		result[i] = letters[int(result[i])%len(letters)]
+	}
+	return string(result), nil
 }
 
 func (r *SleepCycleReconciler) recordEvent(sleepCycle *corev1alpha1.SleepCycle, message string, isError bool) {
