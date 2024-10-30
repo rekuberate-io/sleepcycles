@@ -164,7 +164,7 @@ make docker-buildx
 2. Deploy the controller to the cluster using the image defined in `IMG`:
 
 ```sh
-make deploy
+make install && make deploy
 ```
 
 and then deploy the samples:
