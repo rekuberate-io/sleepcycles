@@ -9,12 +9,14 @@ import (
 	"go.uber.org/zap/zapcore"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes"
 	typedv1core "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/record"
+	"k8s.io/utils/pointer"
 	"os"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
@@ -188,6 +190,13 @@ func syncReplicas(ctx context.Context, namespace string, cronjob *batchv1.CronJo
 func scaleDeployment(ctx context.Context, namespace string, cronjob *batchv1.CronJob, target string, targetReplicas int32) error {
 	deployment, err := clientSet.AppsV1().Deployments(namespace).Get(ctx, target, metav1.GetOptions{})
 	if err != nil {
+		if apierrors.IsNotFound(err) {
+			err := markParentCronJobForDeletion(ctx, cronjob)
+			if err != nil {
+				return err
+			}
+		}
+
 		return err
 	}
 
@@ -221,6 +230,13 @@ func scaleDeployment(ctx context.Context, namespace string, cronjob *batchv1.Cro
 func scaleCronJob(ctx context.Context, namespace string, cronjob *batchv1.CronJob, target string, targetReplicas int32) error {
 	cj, err := clientSet.BatchV1().CronJobs(namespace).Get(ctx, target, metav1.GetOptions{})
 	if err != nil {
+		if apierrors.IsNotFound(err) {
+			err := markParentCronJobForDeletion(ctx, cronjob)
+			if err != nil {
+				return err
+			}
+		}
+
 		return err
 	}
 
@@ -248,6 +264,13 @@ func scaleCronJob(ctx context.Context, namespace string, cronjob *batchv1.CronJo
 func scaleStatefulSets(ctx context.Context, namespace string, cronjob *batchv1.CronJob, target string, targetReplicas int32) error {
 	statefulSet, err := clientSet.AppsV1().StatefulSets(namespace).Get(ctx, target, metav1.GetOptions{})
 	if err != nil {
+		if apierrors.IsNotFound(err) {
+			err := markParentCronJobForDeletion(ctx, cronjob)
+			if err != nil {
+				return err
+			}
+		}
+
 		return err
 	}
 
@@ -281,6 +304,13 @@ func scaleStatefulSets(ctx context.Context, namespace string, cronjob *batchv1.C
 func scaleHorizontalPodAutoscalers(ctx context.Context, namespace string, cronjob *batchv1.CronJob, target string, targetReplicas int32) error {
 	hpa, err := clientSet.AutoscalingV1().HorizontalPodAutoscalers(namespace).Get(ctx, target, metav1.GetOptions{})
 	if err != nil {
+		if apierrors.IsNotFound(err) {
+			err := markParentCronJobForDeletion(ctx, cronjob)
+			if err != nil {
+				return err
+			}
+		}
+
 		return err
 	}
 
@@ -307,6 +337,20 @@ func scaleHorizontalPodAutoscalers(ctx context.Context, namespace string, cronjo
 	}
 
 	logger.Info("horizontal pod autoscaler already in desired state", "namespace", namespace, "hpa", target, "replicas", targetReplicas)
+
+	return nil
+}
+
+func markParentCronJobForDeletion(ctx context.Context, cronjob *batchv1.CronJob) error {
+	err := clientSet.BatchV1().CronJobs(cronjob.Namespace).Delete(
+		ctx,
+		cronjob.Name,
+		metav1.DeleteOptions{
+			GracePeriodSeconds: pointer.Int64Ptr(15),
+		})
+	if err != nil {
+		return err
+	}
 
 	return nil
 }
