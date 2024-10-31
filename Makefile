@@ -1,5 +1,5 @@
 # Image URL to use all building/pushing image targets
-DOCKER_HUB_NAME ?= $(shell docker info | sed '/Username:/!d;s/.* //')
+DOCKER_HUB_NAME ?= akyriako78#$(shell docker info | sed '/Username:/!d;s/.* //')
 # sleepcycles
 IMG_TAG ?= 0.2.8-dev.4
 #IMG_TAG ?= $(shell git rev-parse --short HEAD)
