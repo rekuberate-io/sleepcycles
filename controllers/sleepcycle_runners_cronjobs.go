@@ -74,8 +74,8 @@ func (r *SleepCycleReconciler) createCronJob(
 	}
 
 	labels := make(map[string]string)
-	labels[OwnedBy] = fmt.Sprintf("%s", sleepcycle.Name)
-	labels[Target] = fmt.Sprintf("%s", targetMeta.Name)
+	labels[OwnedBy] = sleepcycle.Name
+	labels[Target] = targetMeta.Name
 	labels[TargetKind] = targetKind
 
 	annotations := make(map[string]string)
@@ -189,7 +189,7 @@ func (r *SleepCycleReconciler) updateCronJob(
 		return err
 	}
 
-	r.recordEvent(sleepcycle, fmt.Sprintf("updated runner %s/%s", cronJob.Namespace, cronJob.Name), false)
+	//r.recordEvent(sleepcycle, fmt.Sprintf("updated runner %s/%s", cronJob.Namespace, cronJob.Name), false)
 	return nil
 }
 
