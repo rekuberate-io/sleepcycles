@@ -1,0 +1,12 @@
+apiVersion: core.rekuberate.io/v1alpha1
+kind: SleepCycle
+metadata:
+  name: sleepcycle-app-5
+  namespace: default
+spec:
+  shutdown: "1/2 * * * *"
+  shutdownTimeZone: "Europe/Athens"
+  wakeup: "*/2 * * * *"
+  wakeupTimeZone: "Europe/Dublin"
+  enabled: true
+  runnerImage: akyriako78/rekuberate-io-sleepcycles-runners:0.2.0-dev-4
