@@ -7,6 +7,7 @@ import (
 	corev1alpha1 "github.com/rekuberate-io/sleepcycles/api/v1alpha1"
 	batchv1 "k8s.io/api/batch/v1"
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -130,6 +131,16 @@ func (r *SleepCycleReconciler) createCronJob(
 										{
 											Name:  "MY_CRONJOB_NAME",
 											Value: cronObjectKey.Name,
+										},
+									},
+									Resources: v1.ResourceRequirements{
+										Limits: v1.ResourceList{
+											v1.ResourceCPU:    resource.MustParse("150m"),
+											v1.ResourceMemory: resource.MustParse("24Mi"),
+										},
+										Requests: v1.ResourceList{
+											v1.ResourceCPU:    resource.MustParse("5m"),
+											v1.ResourceMemory: resource.MustParse("12Mi"),
 										},
 									},
 								},
