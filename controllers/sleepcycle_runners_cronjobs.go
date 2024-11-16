@@ -143,6 +143,10 @@ func (r *SleepCycleReconciler) createCronJob(
 							Tolerations:        sleepcycle.Spec.Runner.GetTolerations(),
 							PriorityClassName:  sleepcycle.Spec.Runner.GetPriorityClass(),
 							NodeSelector:       sleepcycle.Spec.Runner.GetNodeSelector(),
+							SecurityContext: &v1.PodSecurityContext{
+								RunAsUser:    sleepcycle.Spec.Runner.GetRunAsUser(),
+								RunAsNonRoot: func(b bool) *bool { return &b }(true),
+							},
 						},
 						ObjectMeta: metav1.ObjectMeta{
 							Labels:      MergeLabels(labels, sleepcycle.Spec.Runner.GetPodLabels()),

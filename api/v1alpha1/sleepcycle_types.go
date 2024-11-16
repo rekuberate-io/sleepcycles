@@ -84,26 +84,30 @@ type RunnerConfig struct {
 	// +kubebuilder:default:="akyriako78/rekuberate-io-sleepcycles-runners"
 	Image string `json:"runnerImage,omitempty"`
 
+	// imagePullPolicy define the pull policy for docker image
+	ImagePullPolicy corev1.PullPolicy `json:"imagePullPolicy,omitempty"`
+
+	// imagePullSecrets specifies the secret to use when using private registry
+	// https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.11/#localobjectreference-v1-core
+	// +kubebuilder:validation:Optional
+	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
+
 	// RunAsUser define the id of the user to run in the image
 	// +kubebuilder:validation:Minimum=1
 	RunAsUser *int64 `json:"runAsUser,omitempty"`
 
-	// imagePullPolicy define the pull policy for docker image
-	ImagePullPolicy corev1.PullPolicy `json:"imagePullPolicy,omitempty"`
+	// nodeSelector can be specified, which set the pod to fit on a node
+	// https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#nodeselector
+	// +kubebuilder:validation:Optional
+
+	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
 
 	// resourceRequirements works exactly like Container resources, the user can specify the limit and the requests
 	// through this property
 	// https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/
 	// +kubebuilder:validation:Optional
 	ResourcesRequirements *corev1.ResourceRequirements `json:"resourcesRequirements,omitempty"`
-	// imagePullSecrets specifies the secret to use when using private registry
-	// https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.11/#localobjectreference-v1-core
-	// +kubebuilder:validation:Optional
-	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
-	// nodeSelector can be specified, which set the pod to fit on a node
-	// https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#nodeselector
-	// +kubebuilder:validation:Optional
-	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
+
 	// tolerations can be specified, which set the pod's tolerations
 	// https://kubernetes.io/docs/concepts/configuration/taint-and-toleration/#concepts
 	// +kubebuilder:validation:Optional
@@ -132,6 +136,15 @@ func (r *RunnerConfig) GetResources() *v1.ResourceRequirements {
 			"memory": resource.MustParse("128mb"),
 		},
 	}
+}
+
+func (r *RunnerConfig) GetRunAsUser() *int64 {
+	var defaultUserID int64 = 1000
+	if r.RunAsUser != nil {
+		return r.RunAsUser
+	}
+
+	return func(i int64) *int64 { return &i }(defaultUserID)
 }
 
 // GetTolerations returns the tolerations for the given node.
