@@ -3,6 +3,9 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"strconv"
+	"strings"
+
 	"github.com/go-logr/logr"
 	corev1alpha1 "github.com/rekuberate-io/sleepcycles/api/v1alpha1"
 	batchv1 "k8s.io/api/batch/v1"
@@ -10,8 +13,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"strconv"
-	"strings"
 )
 
 var (
@@ -74,8 +75,8 @@ func (r *SleepCycleReconciler) createCronJob(
 	}
 
 	labels := make(map[string]string)
-	labels[OwnedBy] = fmt.Sprintf("%s", sleepcycle.Name)
-	labels[Target] = fmt.Sprintf("%s", targetMeta.Name)
+	labels[OwnedBy] = sleepcycle.Name
+	labels[Target] = targetMeta.Name
 	labels[TargetKind] = targetKind
 
 	annotations := make(map[string]string)
@@ -110,8 +111,10 @@ func (r *SleepCycleReconciler) createCronJob(
 						Spec: v1.PodSpec{
 							Containers: []v1.Container{
 								{
-									Name:  cronObjectKey.Name,
-									Image: sleepcycle.Spec.RunnerImage,
+									Name:            cronObjectKey.Name,
+									Image:           sleepcycle.Spec.Runner.Image,
+									ImagePullPolicy: sleepcycle.Spec.Runner.GetImagePullPolicy(),
+									Resources:       *sleepcycle.Spec.Runner.GetResources(),
 									Env: []v1.EnvVar{
 										{
 											Name: "MY_POD_NAME",
@@ -136,6 +139,14 @@ func (r *SleepCycleReconciler) createCronJob(
 							},
 							RestartPolicy:      v1.RestartPolicyOnFailure,
 							ServiceAccountName: serviceAccountName,
+							ImagePullSecrets:   sleepcycle.Spec.Runner.GetImagePullSecrets(),
+							Tolerations:        sleepcycle.Spec.Runner.GetTolerations(),
+							PriorityClassName:  sleepcycle.Spec.Runner.GetPriorityClass(),
+							NodeSelector:       sleepcycle.Spec.Runner.GetNodeSelector(),
+						},
+						ObjectMeta: metav1.ObjectMeta{
+							Labels:      MergeLabels(labels, sleepcycle.Spec.Runner.GetPodLabels()),
+							Annotations: MergeAnnotations(annotations, sleepcycle.Spec.Runner.GetPodAnnotations()),
 						},
 					},
 					BackoffLimit: &backOffLimit,
