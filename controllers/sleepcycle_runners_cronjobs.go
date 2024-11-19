@@ -10,6 +10,7 @@ import (
 	corev1alpha1 "github.com/rekuberate-io/sleepcycles/api/v1alpha1"
 	batchv1 "k8s.io/api/batch/v1"
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -133,6 +134,16 @@ func (r *SleepCycleReconciler) createCronJob(
 											Value: cronObjectKey.Name,
 										},
 									},
+									Resources: v1.ResourceRequirements{
+										Limits: v1.ResourceList{
+											v1.ResourceCPU:    resource.MustParse("150m"),
+											v1.ResourceMemory: resource.MustParse("24Mi"),
+										},
+										Requests: v1.ResourceList{
+											v1.ResourceCPU:    resource.MustParse("5m"),
+											v1.ResourceMemory: resource.MustParse("12Mi"),
+										},
+									},
 								},
 							},
 							RestartPolicy:      v1.RestartPolicyOnFailure,
@@ -190,7 +201,7 @@ func (r *SleepCycleReconciler) updateCronJob(
 		return err
 	}
 
-	r.recordEvent(sleepcycle, fmt.Sprintf("updated runner %s/%s", cronJob.Namespace, cronJob.Name), false)
+	//r.recordEvent(sleepcycle, fmt.Sprintf("updated runner %s/%s", cronJob.Namespace, cronJob.Name), false)
 	return nil
 }
 
@@ -225,13 +236,13 @@ func (r *SleepCycleReconciler) reconcileCronJob(
 	}
 
 	if cronjob == nil {
-		cronJobRandomUID, err := r.generateSecureRandomString(12)
+		cronJobRandomUID, err := r.generateSecureRandomString(7)
 		if err != nil {
 			return err
 		}
 
 		cronObjectKey := client.ObjectKey{
-			Name:      fmt.Sprintf("sleepcycle-runner-%s-%s-%s", sleepcycle.ObjectMeta.UID[:4], strings.ToLower(cronJobRandomUID), suffix),
+			Name:      fmt.Sprintf("sleepcycle-runner-%s-%s-%s-%s", sleepcycle.ObjectMeta.UID[:4], targetMeta.UID[:4], strings.ToLower(cronJobRandomUID), suffix),
 			Namespace: sleepcycle.Namespace,
 		}
 

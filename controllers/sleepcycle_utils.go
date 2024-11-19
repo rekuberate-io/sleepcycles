@@ -5,20 +5,22 @@ import (
 	"encoding/base64"
 	corev1alpha1 "github.com/rekuberate-io/sleepcycles/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"strings"
 )
 
 const letters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 
-func (r *SleepCycleReconciler) hasLabel(obj *metav1.ObjectMeta, tag string) bool {
-	val, ok := obj.GetLabels()[SleepCycleLabel]
-
-	if ok && val == tag {
-		return true
+func (r *SleepCycleReconciler) getListOptions(namespace, name string) []client.ListOption {
+	labelSelector := map[string]string{
+		SleepCycleLabel: name,
+	}
+	listOptions := []client.ListOption{
+		client.InNamespace(namespace),
+		client.MatchingLabels(labelSelector),
 	}
 
-	return false
+	return listOptions
 }
 
 func (r *SleepCycleReconciler) generateToken() (string, error) {
@@ -37,6 +39,7 @@ func (r *SleepCycleReconciler) generateSecureRandomString(length int) (string, e
 	result := make([]byte, length)
 	_, err := rand.Read(result)
 	if err != nil {
+		r.logger.Error(err, "error while generating a random string")
 		return "", err
 	}
 
@@ -44,6 +47,17 @@ func (r *SleepCycleReconciler) generateSecureRandomString(length int) (string, e
 		result[i] = letters[int(result[i])%len(letters)]
 	}
 	return string(result), nil
+}
+
+func (r *SleepCycleReconciler) getStatusState(provisioned, total int) (state string) {
+	state = "Ready"
+	if provisioned != 0 && provisioned < total {
+		state = "Warning"
+	} else if provisioned == 0 && total != 0 {
+		state = "NotReady"
+	}
+
+	return state
 }
 
 func (r *SleepCycleReconciler) recordEvent(sleepCycle *corev1alpha1.SleepCycle, message string, isError bool) {

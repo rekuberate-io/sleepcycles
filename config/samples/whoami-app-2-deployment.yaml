@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: app-2
-  namespace: app-2
+  namespace: default
   labels:
     app: app-2
     rekuberate.io/sleepcycle: sleepcycle-app-2

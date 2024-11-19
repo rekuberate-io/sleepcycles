@@ -46,9 +46,9 @@ type SleepCycleSpec struct {
 	Enabled bool `json:"enabled"`
 
 	// +optional
-	// +kubebuilder:default=1
+	// +kubebuilder:default=0
 	// +kubebuilder:validation:Type=integer
-	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Minimum=0
 	// +kubebuilder:validation:Maximum=3
 	// +kubebuilder:validation:ExclusiveMinimum=false
 	// +kubebuilder:validation:ExclusiveMaximum=false

@@ -1,7 +1,7 @@
 apiVersion: core.rekuberate.io/v1alpha1
 kind: SleepCycle
 metadata:
-  name: sleepcycle-app-2
+  name: sleepcycle-app-3
   namespace: default
 spec:
   shutdown: "1/2 * * * *"

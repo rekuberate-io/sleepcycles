@@ -19,15 +19,11 @@ package controllers
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/go-logr/logr"
 	"github.com/hashicorp/go-multierror"
 	corev1alpha1 "github.com/rekuberate-io/sleepcycles/api/v1alpha1"
-	appsv1 "k8s.io/api/apps/v1"
-	autoscalingv1 "k8s.io/api/autoscaling/v1"
-	batchv1 "k8s.io/api/batch/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
@@ -40,12 +36,9 @@ import (
 )
 
 const (
-	SleepCycleLabel                             = "rekuberate.io/sleepcycle"
-	SleepCycleFinalizer                         = "sleepcycle.core.rekuberate.io/finalizer"
-	TimeWindowToleranceInSeconds  int           = 30
-	requeueAfter                  time.Duration = 60 * time.Second
-	SleepCycleStatusUpdateFailure string        = "failed to update status"
-	SleepCycleFinalizerFailure    string        = "finalizer failed"
+	SleepCycleLabel                            = "rekuberate.io/sleepcycle"
+	TimeWindowToleranceInSeconds int           = 30
+	requeueAfter                 time.Duration = 60 * time.Second
 )
 
 // SleepCycleReconciler reconciles a SleepCycle object
@@ -58,7 +51,6 @@ type SleepCycleReconciler struct {
 
 type runtimeObjectReconciler func(
 	ctx context.Context,
-	req ctrl.Request,
 	sleepcycle *corev1alpha1.SleepCycle,
 ) (int, int, error)
 
@@ -107,7 +99,6 @@ var (
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.12.2/pkg/reconcile
 func (r *SleepCycleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	r.logger = log.Log.WithValues("namespace", req.Namespace, "sleepcycle", req.Name)
-
 	r.logger.Info("reconciling sleepcycle")
 
 	nsks := "kube-system"
@@ -115,9 +106,6 @@ func (r *SleepCycleReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		r.logger.Info(fmt.Sprintf("setting sleepcycle schedule on resources in namespace %s is not supported", nsks))
 		return ctrl.Result{}, nil
 	}
-
-	provisioned := 0
-	total := 0
 
 	var original corev1alpha1.SleepCycle
 	if err := r.Get(ctx, req.NamespacedName, &original); err != nil {
@@ -135,19 +123,13 @@ func (r *SleepCycleReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, err
 	}
 
-	if err := r.Get(ctx, req.NamespacedName, &original); err != nil {
-		if apierrors.IsNotFound(err) {
-			return ctrl.Result{}, nil
-		}
-
-		r.logger.Error(err, "unable to fetch sleepcycle")
-		return ctrl.Result{}, err
-	}
 	reconcilers := []runtimeObjectReconciler{r.ReconcileDeployments, r.ReconcileCronJobs, r.ReconcileStatefulSets, r.ReconcileHorizontalPodAutoscalers}
 	var errors error
+	provisioned := 0
+	total := 0
 
 	for _, reconciler := range reconcilers {
-		p, t, err := reconciler(ctx, req, &original)
+		p, t, err := reconciler(ctx, &original)
 		if err != nil {
 			errors = multierror.Append(errors, err)
 		}
@@ -164,14 +146,7 @@ func (r *SleepCycleReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		}
 	}
 
-	state := "Ready"
-	if provisioned != 0 && provisioned < total {
-		state = "Warning"
-	} else if provisioned == 0 && total != 0 {
-		state = "NotReady"
-	}
-
-	err = r.UpdateStatus(ctx, &original, state, []int{provisioned, total})
+	err = r.UpdateStatus(ctx, &original, r.getStatusState(provisioned, total), []int{provisioned, total})
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -191,87 +166,6 @@ func (r *SleepCycleReconciler) UpdateStatus(ctx context.Context, sleepcycle *cor
 	}
 
 	return nil
-}
-
-//if !original.Spec.Enabled {
-//	return ctrl.Result{}, nil
-//}
-//desired := *original.DeepCopy()
-//reconcilers := []runtimeObjectReconciler{r.ReconcileDeployments, r.ReconcileCronJobs, r.ReconcileStatefulSets, r.ReconcileHorizontalPodAutoscalers}
-
-//r.logger = r.logger.WithValues("op", currentOperation.String())
-//tz := r.getTimeZone(original.Spec.ShutdownTimeZone)
-//t := nextScheduledShutdown.In(tz)
-//desired.Status.NextScheduledShutdownTime = &metav1.Time{Time: t}
-
-//if err := r.Status().Update(ctx, &desired); err != nil {
-//	r.logger.Error(err, fmt.Sprintf("🛑️ %s", SleepCycleStatusUpdateFailure), "sleepcycle", sleepCycleFullName)
-//	r.Recorder.Event(&original, corev1.EventTypeWarning, "SleepCycleStatus", strings.ToLower(SleepCycleStatusUpdateFailure))
-//	return ctrl.Result{}, err
-//}
-
-func (r *SleepCycleReconciler) ScaleDeployment(ctx context.Context, deployment appsv1.Deployment, replicas int32) error {
-	deepCopy := *deployment.DeepCopy()
-	*deepCopy.Spec.Replicas = replicas
-
-	if err := r.Update(ctx, &deepCopy); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (r *SleepCycleReconciler) ScaleStatefulSet(ctx context.Context, statefulSet appsv1.StatefulSet, replicas int32) error {
-	deepCopy := *statefulSet.DeepCopy()
-	*deepCopy.Spec.Replicas = replicas
-
-	if err := r.Update(ctx, &deepCopy); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (r *SleepCycleReconciler) ScaleHorizontalPodAutoscaler(ctx context.Context, hpa autoscalingv1.HorizontalPodAutoscaler, replicas int32) error {
-	deepCopy := *hpa.DeepCopy()
-	deepCopy.Spec.MaxReplicas = replicas
-
-	if err := r.Update(ctx, &deepCopy); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (r *SleepCycleReconciler) SuspendCronJob(ctx context.Context, cronJob batchv1.CronJob, suspend bool) error {
-	deepCopy := *cronJob.DeepCopy()
-	*deepCopy.Spec.Suspend = suspend
-
-	if err := r.Update(ctx, &deepCopy); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (r *SleepCycleReconciler) WatchDeploymentsHandler(o client.Object) []ctrl.Request {
-	var request []ctrl.Request
-
-	sleepCycleList := corev1alpha1.SleepCycleList{}
-	err := r.Client.List(context.Background(), &sleepCycleList)
-	if err != nil {
-		return nil
-	}
-
-	for _, sleepCycle := range sleepCycleList.Items {
-		if !strings.HasPrefix(sleepCycle.Namespace, "kube-") {
-			request = append(request, ctrl.Request{
-				NamespacedName: client.ObjectKey{Namespace: sleepCycle.Namespace, Name: sleepCycle.Name},
-			})
-		}
-	}
-
-	return request
 }
 
 // SetupWithManager sets up the controller with the Manager.
