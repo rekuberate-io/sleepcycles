@@ -1,12 +1,12 @@
 # Image URL to use all building/pushing image targets
 DOCKER_HUB_NAME ?= akyriako78#$(shell docker info | sed '/Username:/!d;s/.* //')
 # sleepcycles
-IMG_TAG ?= 0.2.8-dev.7
+IMG_TAG ?= 0.2.8-rc.0
 #IMG_TAG ?= $(shell git rev-parse --short HEAD)
 IMG_NAME ?= rekuberate-io-sleepcycles
 IMG ?= $(DOCKER_HUB_NAME)/$(IMG_NAME):$(IMG_TAG)
 # runners
-RUNNERS_IMAGE_TAG ?= 0.2.0-dev-5
+RUNNERS_IMAGE_TAG ?= 0.2.0-rc.0
 RUNNERS_IMG_NAME ?= rekuberate-io-sleepcycles-runners
 RUNNERS_IMG ?= $(DOCKER_HUB_NAME)/$(RUNNERS_IMG_NAME):$(RUNNERS_IMAGE_TAG)
 # targets
