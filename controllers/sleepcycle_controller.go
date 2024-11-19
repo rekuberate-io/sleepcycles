@@ -19,6 +19,9 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"strings"
+	"time"
+
 	"github.com/go-logr/logr"
 	"github.com/hashicorp/go-multierror"
 	corev1alpha1 "github.com/rekuberate-io/sleepcycles/api/v1alpha1"
@@ -34,8 +37,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
-	"strings"
-	"time"
 )
 
 const (
@@ -60,12 +61,6 @@ type runtimeObjectReconciler func(
 	req ctrl.Request,
 	sleepcycle *corev1alpha1.SleepCycle,
 ) (int, int, error)
-
-type runtimeObjectFinalizer func(
-	ctx context.Context,
-	req ctrl.Request,
-	original *corev1alpha1.SleepCycle,
-) (ctrl.Result, error)
 
 var (
 	eventFilters = builder.WithPredicates(predicate.Funcs{
