@@ -9,6 +9,7 @@ IMG ?= $(DOCKER_HUB_NAME)/$(IMG_NAME):$(IMG_TAG)
 RUNNERS_IMAGE_TAG ?= 0.2.0-rc.0
 RUNNERS_IMG_NAME ?= rekuberate-io-sleepcycles-runners
 RUNNERS_IMG ?= $(DOCKER_HUB_NAME)/$(RUNNERS_IMG_NAME):$(RUNNERS_IMAGE_TAG)
+RUNNERS_IMG_LATEST ?= $(DOCKER_HUB_NAME)/$(RUNNERS_IMG_NAME):latest
 # targets
 PLATFORMS ?= linux/arm64,linux/amd64,linux/s390x,linux/ppc64le
 # CONTAINER_TOOL defines the container tool to be used for building images.
@@ -108,7 +109,7 @@ docker-buildx-runner: fmt vet ## Build and push docker image for the runner for 
 	sed -e '1 s/\(^FROM\)/FROM --platform=\$$\{BUILDPLATFORM\}/; t' -e ' 1,// s//FROM --platform=\$$\{BUILDPLATFORM\}/' Dockerfile.runners > Dockerfile.runners.cross
 	- $(CONTAINER_TOOL) buildx create --name runners-builder
 	$(CONTAINER_TOOL) buildx use runners-builder
-	- $(CONTAINER_TOOL) buildx build --push --platform=$(PLATFORMS) --tag ${RUNNERS_IMG} -f Dockerfile.runners.cross .
+	- $(CONTAINER_TOOL) buildx build --push --platform=$(PLATFORMS) --tag ${RUNNERS_IMG} --tag ${RUNNERS_IMG_LATEST} -f Dockerfile.runners.cross .
 	- $(CONTAINER_TOOL) buildx rm runners-builder
 	rm Dockerfile.runners.cross
 
