@@ -17,6 +17,9 @@ limitations under the License.
 package v1alpha1
 
 import (
+	corev1 "k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -63,9 +66,122 @@ type SleepCycleSpec struct {
 	// +kubebuilder:validation:ExclusiveMaximum=false
 	FailedJobsHistoryLimit int32 `json:"failedJobsHistoryLimit,omitempty"`
 
+	Runner RunnerConfig `json:"runner,omitempty"`
+}
+
+type Metadata struct {
+	// Additionnal annotation to merge to the resource associated
+	// https://kubernetes.io/docs/concepts/overview/working-with-objects/annotations/#syntax-and-character-set
+	Annotations map[string]string `json:"annotations,omitempty"`
+	// Additionnal labels to merge to the resource associated
+	// https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#syntax-and-character-set
+	Labels map[string]string `json:"labels,omitempty"`
+}
+
+// RunnerConfig defines the configuration of runner image
+type RunnerConfig struct {
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:default:="akyriako78/rekuberate-io-sleepcycles-runners"
-	RunnerImage string `json:"runnerImage,omitempty"`
+	Image string `json:"runnerImage,omitempty"`
+
+	// imagePullPolicy define the pull policy for docker image
+	ImagePullPolicy corev1.PullPolicy `json:"imagePullPolicy,omitempty"`
+
+	// imagePullSecrets specifies the secret to use when using private registry
+	// https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.11/#localobjectreference-v1-core
+	// +kubebuilder:validation:Optional
+	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
+
+	// RunAsUser define the id of the user to run in the image
+	// +kubebuilder:validation:Minimum=1
+	RunAsUser *int64 `json:"runAsUser,omitempty"`
+
+	// nodeSelector can be specified, which set the pod to fit on a node
+	// https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#nodeselector
+	// +kubebuilder:validation:Optional
+
+	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
+
+	// resourceRequirements works exactly like Container resources, the user can specify the limit and the requests
+	// through this property
+	// https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/
+	// +kubebuilder:validation:Optional
+	ResourcesRequirements *corev1.ResourceRequirements `json:"resourcesRequirements,omitempty"`
+
+	// tolerations can be specified, which set the pod's tolerations
+	// https://kubernetes.io/docs/concepts/configuration/taint-and-toleration/#concepts
+	// +kubebuilder:validation:Optional
+	Tolerations []corev1.Toleration `json:"tolerations,omitempty"`
+
+	// podMetadata allows to add additionnal metadata to the node pods
+	PodMetadata Metadata `json:"podMetadata,omitempty"`
+
+	// priorityClassName can be used to set the priority class applied to the node
+	// +optional
+	PriorityClassName *string `json:"priorityClassName,omitempty"`
+}
+
+// GetResources returns the sleepcycle runner Kubernetes resource.
+func (r *RunnerConfig) GetResources() *v1.ResourceRequirements {
+	if r.ResourcesRequirements != nil {
+		return r.ResourcesRequirements
+	}
+	return &v1.ResourceRequirements{
+		Limits: v1.ResourceList{
+			"cpu":    resource.MustParse("10m"),
+			"memory": resource.MustParse("128mb"),
+		},
+		Requests: v1.ResourceList{
+			"cpu":    resource.MustParse("10m"),
+			"memory": resource.MustParse("128mb"),
+		},
+	}
+}
+
+func (r *RunnerConfig) GetRunAsUser() *int64 {
+	var defaultUserID int64 = 1000
+	if r.RunAsUser != nil {
+		return r.RunAsUser
+	}
+
+	return func(i int64) *int64 { return &i }(defaultUserID)
+}
+
+// GetTolerations returns the tolerations for the given node.
+func (r *RunnerConfig) GetTolerations() []corev1.Toleration {
+	return r.Tolerations
+}
+
+// GetNodeSelector returns the node selector for the given node.
+func (r *RunnerConfig) GetNodeSelector() map[string]string {
+	return r.NodeSelector
+}
+
+// GetImagePullSecrets returns the list of Secrets needed to pull Containers images from private repositories.
+func (r *RunnerConfig) GetImagePullSecrets() []corev1.LocalObjectReference {
+	return r.ImagePullSecrets
+}
+
+// GetImagePullPolicy returns the image pull policy to pull containers images.
+func (r *RunnerConfig) GetImagePullPolicy() corev1.PullPolicy {
+	return r.ImagePullPolicy
+}
+
+func (r *RunnerConfig) GetPodAnnotations() map[string]string {
+	return r.PodMetadata.Annotations
+}
+
+// GetNodeLabels returns additional labels configured to be applied to each nifi node.
+func (r *RunnerConfig) GetPodLabels() map[string]string {
+	return r.PodMetadata.Labels
+}
+
+// GetPriorityClass returns the name of the priority class to use for the given node.
+func (r *RunnerConfig) GetPriorityClass() string {
+	if r.PriorityClassName != nil {
+		return *r.PriorityClassName
+	}
+	return ""
 }
 
 // SleepCycleStatus defines the observed state of SleepCycle

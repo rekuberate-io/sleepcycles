@@ -3,10 +3,11 @@ package controllers
 import (
 	"crypto/rand"
 	"encoding/base64"
+	"strings"
+
 	corev1alpha1 "github.com/rekuberate-io/sleepcycles/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"strings"
 )
 
 const letters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
@@ -56,4 +57,27 @@ func (r *SleepCycleReconciler) recordEvent(sleepCycle *corev1alpha1.SleepCycle, 
 	}
 
 	r.Recorder.Event(sleepCycle, eventType, reason, strings.ToLower(message))
+}
+
+// MergeLabels merges two given labels.
+func MergeLabels(l ...map[string]string) map[string]string {
+	res := make(map[string]string)
+
+	for _, v := range l {
+		for lKey, lValue := range v {
+			res[lKey] = lValue
+		}
+	}
+	return res
+}
+
+func MergeAnnotations(annotations ...map[string]string) map[string]string {
+	rtn := make(map[string]string)
+	for _, a := range annotations {
+		for k, v := range a {
+			rtn[k] = v
+		}
+	}
+
+	return rtn
 }

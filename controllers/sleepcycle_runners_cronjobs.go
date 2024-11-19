@@ -111,8 +111,10 @@ func (r *SleepCycleReconciler) createCronJob(
 						Spec: v1.PodSpec{
 							Containers: []v1.Container{
 								{
-									Name:  cronObjectKey.Name,
-									Image: sleepcycle.Spec.RunnerImage,
+									Name:            cronObjectKey.Name,
+									Image:           sleepcycle.Spec.Runner.Image,
+									ImagePullPolicy: sleepcycle.Spec.Runner.GetImagePullPolicy(),
+									Resources:       *sleepcycle.Spec.Runner.GetResources(),
 									Env: []v1.EnvVar{
 										{
 											Name: "MY_POD_NAME",
@@ -137,6 +139,18 @@ func (r *SleepCycleReconciler) createCronJob(
 							},
 							RestartPolicy:      v1.RestartPolicyOnFailure,
 							ServiceAccountName: serviceAccountName,
+							ImagePullSecrets:   sleepcycle.Spec.Runner.GetImagePullSecrets(),
+							Tolerations:        sleepcycle.Spec.Runner.GetTolerations(),
+							PriorityClassName:  sleepcycle.Spec.Runner.GetPriorityClass(),
+							NodeSelector:       sleepcycle.Spec.Runner.GetNodeSelector(),
+							SecurityContext: &v1.PodSecurityContext{
+								RunAsUser:    sleepcycle.Spec.Runner.GetRunAsUser(),
+								RunAsNonRoot: func(b bool) *bool { return &b }(true),
+							},
+						},
+						ObjectMeta: metav1.ObjectMeta{
+							Labels:      MergeLabels(labels, sleepcycle.Spec.Runner.GetPodLabels()),
+							Annotations: MergeAnnotations(annotations, sleepcycle.Spec.Runner.GetPodAnnotations()),
 						},
 					},
 					BackoffLimit: &backOffLimit,
