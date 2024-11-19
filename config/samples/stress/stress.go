@@ -49,7 +49,7 @@ func main() {
 	defer func(logger *zap.Logger) {
 		err := logger.Sync()
 		if err != nil {
-			fmt.Errorf("failed to sync zap logger: %v", err)
+			_ = fmt.Errorf("failed to sync zap logger: %v", err)
 		}
 	}(logger)
 
