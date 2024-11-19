@@ -46,7 +46,12 @@ func main() {
 	}
 
 	logger, _ = zap.NewProduction()
-	defer logger.Sync()
+	defer func(logger *zap.Logger) {
+		err := logger.Sync()
+		if err != nil {
+			fmt.Errorf("failed to sync zap logger: %v", err)
+		}
+	}(logger)
 
 	config, err := clientcmd.BuildConfigFromFlags("", filepath.Join(home, ".kube", *kubeconfig))
 	if err != nil {
