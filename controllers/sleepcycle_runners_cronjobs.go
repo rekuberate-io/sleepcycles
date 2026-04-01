@@ -16,16 +16,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-var (
-	startingDeadlineSeconds int64 = 15
-)
-
 const (
-	OwnedBy        = "rekuberate.io/owned-by"
-	Target         = "rekuberate.io/target"
-	TargetKind     = "rekuberate.io/target-kind"
-	TargetTimezone = "rekuberate.io/target-tz"
-	Replicas       = "rekuberate.io/replicas"
+	OwnedBy                        = "rekuberate.io/owned-by"
+	Target                         = "rekuberate.io/target"
+	TargetKind                     = "rekuberate.io/target-kind"
+	TargetTimezone                 = "rekuberate.io/target-tz"
+	Replicas                       = "rekuberate.io/replicas"
+	DefaultStartingDeadlineSeconds = 15
 )
 
 func (r *SleepCycleReconciler) getCronJob(ctx context.Context, ownedBy, target, namespace, suffix string) (*batchv1.CronJob, error) {
@@ -73,6 +70,11 @@ func (r *SleepCycleReconciler) createCronJob(
 	if !isShutdownOp {
 		schedule = *sleepcycle.Spec.WakeUp
 		tz = sleepcycle.Spec.WakeupTimeZone
+	}
+
+	startingDeadlineSeconds := sleepcycle.Spec.StartingDeadlineSeconds
+	if startingDeadlineSeconds == 0 {
+		startingDeadlineSeconds = DefaultStartingDeadlineSeconds
 	}
 
 	labels := make(map[string]string)
@@ -253,7 +255,7 @@ func (r *SleepCycleReconciler) reconcileCronJob(
 	}
 
 	if cronjob != nil {
-		if cronjob.Status.Active != nil {
+		if len(cronjob.Status.Active) > 0 {
 			return nil
 		}
 

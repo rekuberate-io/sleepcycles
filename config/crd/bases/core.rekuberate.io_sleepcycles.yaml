@@ -65,6 +65,11 @@ spec:
                 maximum: 3
                 minimum: 1
                 type: integer
+              requeueAfterSeconds:
+                default: 60
+                format: int32
+                minimum: 10
+                type: integer
               runnerImage:
                 default: akyriako78/rekuberate-io-sleepcycles-runners
                 type: string
@@ -74,6 +79,11 @@ spec:
               shutdownTimeZone:
                 default: UTC
                 type: string
+              startingDeadlineSeconds:
+                default: 15
+                format: int64
+                minimum: 5
+                type: integer
               successfulJobsHistoryLimit:
                 default: 0
                 format: int32
