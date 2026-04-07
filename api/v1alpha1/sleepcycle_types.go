@@ -64,7 +64,7 @@ type SleepCycleSpec struct {
 	FailedJobsHistoryLimit int32 `json:"failedJobsHistoryLimit,omitempty"`
 
 	// +kubebuilder:validation:Optional
-	// +kubebuilder:default:="akyriako78/rekuberate-io-sleepcycles-runners"
+	// +kubebuilder:default:="quay.io/akyriako/sleepcycles-runners"
 	RunnerImage string `json:"runnerImage,omitempty"`
 }
 

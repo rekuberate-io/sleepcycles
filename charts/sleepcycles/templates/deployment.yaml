@@ -60,15 +60,11 @@ spec:
           }}
         securityContext: {{- toYaml .Values.controllerManager.manager.containerSecurityContext
           | nindent 10 }}
-      securityContext:
-        runAsNonRoot: true
-      serviceAccountName: {{ include "sleepcycles.fullname" . }}-controller-manager
+      nodeSelector: {{- toYaml .Values.controllerManager.nodeSelector | nindent 8 }}
+      securityContext: {{- toYaml .Values.controllerManager.podSecurityContext | nindent
+        8 }}
+      serviceAccountName: {{ include "sleepcycles.serviceAccountName" . }}
       terminationGracePeriodSeconds: 10
-      {{- if .Values.controllerManager.nodeSelector }}
-      nodeSelector:
-{{ toYaml .Values.controllerManager.nodeSelector | indent 8 }}
-      {{- end }}
-      {{- if .Values.controllerManager.tolerations }}
-      tolerations:
-{{ toYaml .Values.controllerManager.tolerations | indent 8 }}
-      {{- end }}
+      tolerations: {{- toYaml .Values.controllerManager.tolerations | nindent 8 }}
+      topologySpreadConstraints: {{- toYaml .Values.controllerManager.topologySpreadConstraints
+        | nindent 8 }}
