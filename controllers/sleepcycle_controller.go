@@ -36,9 +36,8 @@ import (
 )
 
 const (
-	SleepCycleLabel                            = "rekuberate.io/sleepcycle"
-	TimeWindowToleranceInSeconds int           = 30
-	requeueAfter                 time.Duration = 60 * time.Second
+	SleepCycleLabel            = "rekuberate.io/sleepcycle"
+	DefaultRequeueAfterSeconds = 60
 )
 
 // SleepCycleReconciler reconciles a SleepCycle object
@@ -116,6 +115,13 @@ func (r *SleepCycleReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		r.logger.Error(err, "unable to fetch sleepcycle")
 		return ctrl.Result{}, err
 	}
+
+	rqa := original.Spec.RequeueAfterSeconds
+	if rqa == 0 {
+		rqa = DefaultRequeueAfterSeconds
+	}
+
+	requeueAfter := time.Duration(rqa) * time.Second
 
 	err := r.reconcileRbac(ctx, &original)
 	if err != nil {

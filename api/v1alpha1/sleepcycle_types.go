@@ -63,6 +63,18 @@ type SleepCycleSpec struct {
 	// +kubebuilder:validation:ExclusiveMaximum=false
 	FailedJobsHistoryLimit int32 `json:"failedJobsHistoryLimit,omitempty"`
 
+	// +optional
+	// +kubebuilder:default=60
+	// +kubebuilder:validation:Type=integer
+	// +kubebuilder:validation:Minimum=10
+	RequeueAfterSeconds int32 `json:"requeueAfterSeconds,omitempty"`
+
+	// +optional
+	// +kubebuilder:default=15
+	// +kubebuilder:validation:Type=integer
+	// +kubebuilder:validation:Minimum=5
+	StartingDeadlineSeconds int64 `json:"startingDeadlineSeconds,omitempty"`
+
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:default:="quay.io/akyriako/sleepcycles-runners"
 	RunnerImage string `json:"runnerImage,omitempty"`
