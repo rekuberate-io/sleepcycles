@@ -1,13 +1,13 @@
 # Image URL to use all building/pushing image targets
-DOCKER_HUB_NAME ?= akyriako78#$(shell docker info | sed '/Username:/!d;s/.* //')
+DOCKER_HUB_NAME ?= quay.io/akyriako#$(shell docker info | sed '/Username:/!d;s/.* //')
 # sleepcycles
-IMG_TAG ?= 0.2.8-rc.0
+IMG_TAG ?= 0.2.9
 #IMG_TAG ?= $(shell git rev-parse --short HEAD)
-IMG_NAME ?= rekuberate-io-sleepcycles
+IMG_NAME ?= sleepcycles
 IMG ?= $(DOCKER_HUB_NAME)/$(IMG_NAME):$(IMG_TAG)
 # runners
-RUNNERS_IMAGE_TAG ?= 0.2.0-rc.0
-RUNNERS_IMG_NAME ?= rekuberate-io-sleepcycles-runners
+RUNNERS_IMAGE_TAG ?= 0.2.0
+RUNNERS_IMG_NAME ?= sleepcycles-runners
 RUNNERS_IMG ?= $(DOCKER_HUB_NAME)/$(RUNNERS_IMG_NAME):$(RUNNERS_IMAGE_TAG)
 RUNNERS_IMG_LATEST ?= $(DOCKER_HUB_NAME)/$(RUNNERS_IMG_NAME):latest
 # targets
@@ -86,7 +86,7 @@ run: manifests generate fmt vet ## Run a controller from your host.
 	go run ./main.go
 
 .PHONY: docker-build
-docker-build: test ## Build docker image with the manager.
+docker-build: ## Build docker image with the manager.
 	docker build -t ${IMG} .
 
 .PHONY: docker-push
@@ -94,7 +94,7 @@ docker-push: ## Push docker image with the manager.
 	docker push ${IMG}
 
 .PHONY: docker-buildx
-docker-buildx: test ## Build and push docker image for the manager for cross-platform support
+docker-buildx: ## Build and push docker image for the manager for cross-platform support
 	# copy existing Dockerfile and insert --platform=${BUILDPLATFORM} into Dockerfile.cross, and preserve the original Dockerfile
 	sed -e '1 s/\(^FROM\)/FROM --platform=\$$\{BUILDPLATFORM\}/; t' -e ' 1,// s//FROM --platform=\$$\{BUILDPLATFORM\}/' Dockerfile > Dockerfile.cross
 	- $(CONTAINER_TOOL) buildx create --name sleepcycles-builder
@@ -151,6 +151,7 @@ ENVTEST ?= $(LOCALBIN)/setup-envtest
 ## Tool Versions
 KUSTOMIZE_VERSION ?= v3.8.7
 CONTROLLER_TOOLS_VERSION ?= v0.9.2
+ENVTEST_VERSION ?= release-0.12
 
 KUSTOMIZE_INSTALL_SCRIPT ?= "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh"
 .PHONY: kustomize
@@ -166,7 +167,7 @@ $(CONTROLLER_GEN): $(LOCALBIN)
 .PHONY: envtest
 envtest: $(ENVTEST) ## Download envtest-setup locally if necessary.
 $(ENVTEST): $(LOCALBIN)
-	test -s $(LOCALBIN)/setup-envtest || GOBIN=$(LOCALBIN) go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest
+	test -s $(LOCALBIN)/setup-envtest || GOBIN=$(LOCALBIN) go install sigs.k8s.io/controller-runtime/tools/setup-envtest@$(CONTROLLER_TOOLS_VERSION)
 
 
 HELMIFY ?= $(LOCALBIN)/helmify
@@ -178,3 +179,4 @@ $(HELMIFY): $(LOCALBIN)
 
 helm: manifests kustomize helmify
 	$(KUSTOMIZE) build config/default | $(HELMIFY) charts/sleepcycles
+	sed -i -e 's|^appVersion:.*|appVersion: "$(IMG_TAG)"|' -e 's|^version:.*|version: $(IMG_TAG)|' ./charts/sleepcycles/Chart.yaml

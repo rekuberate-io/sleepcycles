@@ -30,5 +30,5 @@ roleRef:
   name: '{{ include "sleepcycles.fullname" . }}-proxy-role'
 subjects:
 - kind: ServiceAccount
-  name: '{{ include "sleepcycles.fullname" . }}-controller-manager'
+  name: '{{ include "sleepcycles.serviceAccountName" . }}'
   namespace: '{{ .Release.Namespace }}'
