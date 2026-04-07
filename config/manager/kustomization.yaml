@@ -13,4 +13,4 @@ kind: Kustomization
 images:
 - name: controller
   newName: quay.io/akyriako/sleepcycles
-  newTag: 0.2.9
+  newTag: 0.2.10

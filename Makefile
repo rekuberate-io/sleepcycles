@@ -1,7 +1,7 @@
 # Image URL to use all building/pushing image targets
 DOCKER_HUB_NAME ?= quay.io/akyriako#$(shell docker info | sed '/Username:/!d;s/.* //')
 # sleepcycles
-IMG_TAG ?= 0.2.9
+IMG_TAG ?= 0.2.10
 #IMG_TAG ?= $(shell git rev-parse --short HEAD)
 IMG_NAME ?= sleepcycles
 IMG ?= $(DOCKER_HUB_NAME)/$(IMG_NAME):$(IMG_TAG)
