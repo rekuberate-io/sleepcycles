@@ -1,8 +1,12 @@
 name: Release Charts
 on:
-  push:
-    branches:
-      - main
+#  push:
+#    branches:
+#      - main
+#    paths-ignore:
+#      - '**/README.md'
+#      - "**/.github/workflows/**"
+  workflow_dispatch:
 
 jobs:
   chart-release:
