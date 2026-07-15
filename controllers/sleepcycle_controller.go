@@ -125,7 +125,7 @@ func (r *SleepCycleReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 	requeue, err := r.reconcileRbac(ctx, &original)
 	if err != nil {
-		r.recordEvent(&original, fmt.Sprintf("unable to create rbac resources in %s", req.Namespace), false)
+		r.recordEvent(&original, fmt.Sprintf("unable to create rbac resources in %s", req.Namespace), true)
 		return ctrl.Result{}, err
 	}
 	if requeue {
