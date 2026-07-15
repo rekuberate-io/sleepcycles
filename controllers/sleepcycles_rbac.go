@@ -3,6 +3,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+
 	"github.com/pkg/errors"
 	corev1alpha1 "github.com/rekuberate-io/sleepcycles/api/v1alpha1"
 	v1 "k8s.io/api/core/v1"
@@ -17,121 +18,63 @@ const (
 	serviceAccountName = "sleecycles-runner"
 )
 
-func (r *SleepCycleReconciler) reconcileRbac(ctx context.Context, sleepcycle *corev1alpha1.SleepCycle) error {
+func (r *SleepCycleReconciler) reconcileRbac(ctx context.Context, sleepcycle *corev1alpha1.SleepCycle) (bool, error) {
 	perr := fmt.Errorf("unable to create rbac resources")
-	ready, err := r.checkRbac(ctx, sleepcycle)
+
+	account, requeue, err := r.ensureServiceAccount(ctx, sleepcycle)
 	if err != nil {
-		return err
+		return false, errors.Wrap(err, perr.Error())
+	}
+	if requeue {
+		return true, nil
 	}
 
-	if ready {
-		return nil
-	}
-
-	err = r.deleteRbac(ctx, sleepcycle)
+	_, requeue, err = r.ensureSecret(ctx, account)
 	if err != nil {
-		return err
+		return false, errors.Wrap(err, perr.Error())
+	}
+	if requeue {
+		return true, nil
 	}
 
-	account, err := r.createServiceAccount(ctx, sleepcycle)
+	role, requeue, err := r.ensureRole(ctx, account)
 	if err != nil {
-		return errors.Wrap(err, perr.Error())
+		return false, errors.Wrap(err, perr.Error())
+	}
+	if requeue {
+		return true, nil
 	}
 
-	_, err = r.createSecret(ctx, account)
+	_, requeue, err = r.ensureRoleBinding(ctx, role)
 	if err != nil {
-		return errors.Wrap(err, perr.Error())
+		return false, errors.Wrap(err, perr.Error())
+	}
+	if requeue {
+		return true, nil
 	}
 
-	role, err := r.createRole(ctx, account)
-	if err != nil {
-		return errors.Wrap(err, perr.Error())
-	}
-
-	_, err = r.createRoleBinding(ctx, role)
-	if err != nil {
-		return errors.Wrap(err, perr.Error())
-	}
-
-	r.recordEvent(sleepcycle, fmt.Sprintf("created rbac resources in %s", sleepcycle.Namespace), false)
-	return nil
+	r.recordEvent(sleepcycle, fmt.Sprintf("reconciled rbac resources in %s", sleepcycle.Namespace), false)
+	return false, nil
 }
 
-func (r *SleepCycleReconciler) checkRbac(ctx context.Context, sleepcycle *corev1alpha1.SleepCycle) (bool, error) {
-	ready := true
-
-	saok := client.ObjectKey{
-		Namespace: sleepcycle.Namespace,
-		Name:      serviceAccountName,
-	}
-	var sa v1.ServiceAccount
-	if err := r.Get(ctx, saok, &sa); err != nil {
-		if apierrors.IsNotFound(err) {
-			ready = false
-		} else {
-			r.logger.Error(err, "unable to fetch service account")
-			return false, err
-		}
-	}
-
-	var ro rbacv1.Role
-	rook := client.ObjectKey{
-		Namespace: sleepcycle.Namespace,
-		Name:      fmt.Sprintf("%s-role", serviceAccountName),
-	}
-	if err := r.Get(ctx, rook, &ro); err != nil {
-		if apierrors.IsNotFound(err) {
-			ready = false
-		} else {
-			r.logger.Error(err, "unable to fetch role")
-			return false, err
-		}
-	}
-
-	var rb rbacv1.RoleBinding
-	rbok := client.ObjectKey{
-		Namespace: sleepcycle.Namespace,
-		Name:      fmt.Sprintf("%s-rolebinding", serviceAccountName),
-	}
-	if err := r.Get(ctx, rbok, &rb); err != nil {
-		if apierrors.IsNotFound(err) {
-			ready = false
-		} else {
-			r.logger.Error(err, "unable to fetch role binding")
-			return false, err
-		}
-	}
-
-	return ready, nil
-}
-
-func (r *SleepCycleReconciler) deleteRbac(ctx context.Context, sleepcycle *corev1alpha1.SleepCycle) error {
-	saok := client.ObjectKey{
-		Namespace: sleepcycle.Namespace,
-		Name:      serviceAccountName,
-	}
-	var sa v1.ServiceAccount
-	if err := r.Get(ctx, saok, &sa); err != nil {
-		if !apierrors.IsNotFound(err) {
-			r.logger.Error(err, "unable to fetch service account")
-			return err
-		}
-
-		return nil
-	}
-
-	err := r.Delete(ctx, &sa)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (r *SleepCycleReconciler) createServiceAccount(ctx context.Context, sleepcycle *corev1alpha1.SleepCycle) (*v1.ServiceAccount, error) {
+func (r *SleepCycleReconciler) ensureServiceAccount(ctx context.Context, sleepcycle *corev1alpha1.SleepCycle) (*v1.ServiceAccount, bool, error) {
 	objectKey := client.ObjectKey{
 		Namespace: sleepcycle.Namespace,
 		Name:      serviceAccountName,
+	}
+
+	var existing v1.ServiceAccount
+	err := r.Get(ctx, objectKey, &existing)
+	if err == nil {
+		if !existing.DeletionTimestamp.IsZero() {
+			r.logger.Info("service account is terminating, waiting before recreating", "account", serviceAccountName)
+			return nil, true, nil
+		}
+		return &existing, false, nil
+	}
+	if !apierrors.IsNotFound(err) {
+		r.logger.Error(err, "unable to fetch service account")
+		return nil, false, err
 	}
 
 	r.logger.Info("creating service account", "account", serviceAccountName)
@@ -142,30 +85,52 @@ func (r *SleepCycleReconciler) createServiceAccount(ctx context.Context, sleepcy
 		},
 	}
 
-	err := ctrl.SetControllerReference(sleepcycle, sa, r.Scheme)
-	if err != nil {
-		return nil, err
+	if err := ctrl.SetControllerReference(sleepcycle, sa, r.Scheme); err != nil {
+		return nil, false, err
 	}
 
-	err = r.Create(ctx, sa)
-	if err != nil {
-		return nil, err
+	if err := r.Create(ctx, sa); err != nil {
+		// Someone (or a previous reconcile) created it concurrently, or an old
+		// instance is still terminating. Requeue instead of erroring out.
+		if apierrors.IsAlreadyExists(err) {
+			return nil, true, nil
+		}
+		return nil, false, err
 	}
 
-	return sa, nil
+	return sa, false, nil
 }
 
-func (r *SleepCycleReconciler) createSecret(ctx context.Context, serviceAccount *v1.ServiceAccount) (*v1.Secret, error) {
-	r.logger.Info("creating secret", "secret", fmt.Sprintf("%s-secret", serviceAccountName))
+func (r *SleepCycleReconciler) ensureSecret(ctx context.Context, serviceAccount *v1.ServiceAccount) (*v1.Secret, bool, error) {
+	secretName := fmt.Sprintf("%s-secret", serviceAccountName)
+	objectKey := client.ObjectKey{
+		Namespace: serviceAccount.Namespace,
+		Name:      secretName,
+	}
 
+	var existing v1.Secret
+	err := r.Get(ctx, objectKey, &existing)
+	if err == nil {
+		if !existing.DeletionTimestamp.IsZero() {
+			r.logger.Info("secret is terminating, waiting before recreating", "secret", secretName)
+			return nil, true, nil
+		}
+		return &existing, false, nil
+	}
+	if !apierrors.IsNotFound(err) {
+		r.logger.Error(err, "unable to fetch secret")
+		return nil, false, err
+	}
+
+	r.logger.Info("creating secret", "secret", secretName)
 	token, err := r.generateToken()
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
 	secret := &v1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      fmt.Sprintf("%s-secret", serviceAccountName),
+			Name:      secretName,
 			Namespace: serviceAccount.Namespace,
 			Annotations: map[string]string{
 				"kubernetes.io/service-account.name": serviceAccountName,
@@ -177,23 +142,42 @@ func (r *SleepCycleReconciler) createSecret(ctx context.Context, serviceAccount 
 		},
 	}
 
-	err = ctrl.SetControllerReference(serviceAccount, secret, r.Scheme)
-	if err != nil {
-		return nil, err
+	if err := ctrl.SetControllerReference(serviceAccount, secret, r.Scheme); err != nil {
+		return nil, false, err
 	}
 
-	err = r.Create(ctx, secret)
-	if err != nil {
-		return nil, err
+	if err := r.Create(ctx, secret); err != nil {
+		if apierrors.IsAlreadyExists(err) {
+			return nil, true, nil
+		}
+		return nil, false, err
 	}
 
-	return secret, nil
+	return secret, false, nil
 }
 
-func (r *SleepCycleReconciler) createRole(ctx context.Context, serviceAccount *v1.ServiceAccount) (*rbacv1.Role, error) {
-	r.logger.Info("creating role", "role", fmt.Sprintf("%s-role", serviceAccountName))
-
+func (r *SleepCycleReconciler) ensureRole(ctx context.Context, serviceAccount *v1.ServiceAccount) (*rbacv1.Role, bool, error) {
 	roleName := fmt.Sprintf("%s-role", serviceAccountName)
+	objectKey := client.ObjectKey{
+		Namespace: serviceAccount.Namespace,
+		Name:      roleName,
+	}
+
+	var existing rbacv1.Role
+	err := r.Get(ctx, objectKey, &existing)
+	if err == nil {
+		if !existing.DeletionTimestamp.IsZero() {
+			r.logger.Info("role is terminating, waiting before recreating", "role", roleName)
+			return nil, true, nil
+		}
+		return &existing, false, nil
+	}
+	if !apierrors.IsNotFound(err) {
+		r.logger.Error(err, "unable to fetch role")
+		return nil, false, err
+	}
+
+	r.logger.Info("creating role", "role", roleName)
 	role := &rbacv1.Role{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      roleName,
@@ -223,24 +207,45 @@ func (r *SleepCycleReconciler) createRole(ctx context.Context, serviceAccount *v
 		},
 	}
 
-	err := ctrl.SetControllerReference(serviceAccount, role, r.Scheme)
-	if err != nil {
-		return nil, err
+	if err := ctrl.SetControllerReference(serviceAccount, role, r.Scheme); err != nil {
+		return nil, false, err
 	}
 
-	err = r.Create(ctx, role)
-	if err != nil {
-		return nil, err
+	if err := r.Create(ctx, role); err != nil {
+		if apierrors.IsAlreadyExists(err) {
+			return nil, true, nil
+		}
+		return nil, false, err
 	}
 
-	return role, nil
+	return role, false, nil
 }
 
-func (r *SleepCycleReconciler) createRoleBinding(ctx context.Context, role *rbacv1.Role) (*rbacv1.RoleBinding, error) {
-	r.logger.Info("creating role binding", "role", fmt.Sprintf("%s-rolebinding", serviceAccountName))
+func (r *SleepCycleReconciler) ensureRoleBinding(ctx context.Context, role *rbacv1.Role) (*rbacv1.RoleBinding, bool, error) {
+	roleBindingName := fmt.Sprintf("%s-rolebinding", serviceAccountName)
+	objectKey := client.ObjectKey{
+		Namespace: role.Namespace,
+		Name:      roleBindingName,
+	}
+
+	var existing rbacv1.RoleBinding
+	err := r.Get(ctx, objectKey, &existing)
+	if err == nil {
+		if !existing.DeletionTimestamp.IsZero() {
+			r.logger.Info("role binding is terminating, waiting before recreating", "rolebinding", roleBindingName)
+			return nil, true, nil
+		}
+		return &existing, false, nil
+	}
+	if !apierrors.IsNotFound(err) {
+		r.logger.Error(err, "unable to fetch role binding")
+		return nil, false, err
+	}
+
+	r.logger.Info("creating role binding", "rolebinding", roleBindingName)
 	roleBinding := &rbacv1.RoleBinding{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      fmt.Sprintf("%s-rolebinding", serviceAccountName),
+			Name:      roleBindingName,
 			Namespace: role.Namespace,
 		},
 		RoleRef: rbacv1.RoleRef{
@@ -257,15 +262,16 @@ func (r *SleepCycleReconciler) createRoleBinding(ctx context.Context, role *rbac
 		},
 	}
 
-	err := ctrl.SetControllerReference(role, roleBinding, r.Scheme)
-	if err != nil {
-		return nil, err
+	if err := ctrl.SetControllerReference(role, roleBinding, r.Scheme); err != nil {
+		return nil, false, err
 	}
 
-	err = r.Create(ctx, roleBinding)
-	if err != nil {
-		return nil, err
+	if err := r.Create(ctx, roleBinding); err != nil {
+		if apierrors.IsAlreadyExists(err) {
+			return nil, true, nil
+		}
+		return nil, false, err
 	}
 
-	return roleBinding, nil
+	return roleBinding, false, nil
 }

@@ -123,10 +123,15 @@ func (r *SleepCycleReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 	requeueAfter := time.Duration(rqa) * time.Second
 
-	err := r.reconcileRbac(ctx, &original)
+	requeue, err := r.reconcileRbac(ctx, &original)
 	if err != nil {
 		r.recordEvent(&original, fmt.Sprintf("unable to create rbac resources in %s", req.Namespace), false)
 		return ctrl.Result{}, err
+	}
+	if requeue {
+		// An rbac resource is still terminating; retry shortly instead of
+		// creating on top of a terminating object.
+		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 	}
 
 	reconcilers := []runtimeObjectReconciler{r.ReconcileDeployments, r.ReconcileCronJobs, r.ReconcileStatefulSets, r.ReconcileHorizontalPodAutoscalers}
