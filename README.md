@@ -293,7 +293,7 @@ make docker-buildx-runner
 
 > [!IMPORTANT]
 > In this case you will need to adjust the `runnerImage` of your `SleepCycle` manifest to use your own Runner image,
-> otherwise it defaults always to `akyriako78/rekuberate-io-sleepcycles-runners`
+> otherwise it defaults always to `quay.io/akyriako/sleepcycles-runners`
 
 ### Uninstall CRDs
 To delete the CRDs from the cluster:
