@@ -109,7 +109,7 @@ The diagram below describes how `rekuberate.io/sleepcycles` are dealing with sch
 4. It provisions a `ServiceAccount`, a `Role` and a `RoleBinding` **per namespace**, in order to make possible for runner-pods to update resources' specs.
 5. The `Runner` pods will be created automatically by the cron jobs and are responsible for scaling the resources up or down.
 
-![SCR-20240527-q9y.png](docs/images/SCR-20240527-qei.png)
+<img width="1442" height="1001" alt="image" src="https://github.com/user-attachments/assets/ded62bc9-399e-4ea8-9ce3-043391a34b83" />
 
 > [!NOTE]
 > In the diagram it was depicted how `rekuberate.io/sleepcycles` scales `Deployment`. The same steps count for a
