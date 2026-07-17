@@ -114,8 +114,9 @@ func (r *SleepCycleReconciler) createCronJob(
 						Spec: v1.PodSpec{
 							Containers: []v1.Container{
 								{
-									Name:  cronObjectKey.Name,
-									Image: sleepcycle.Spec.RunnerImage,
+									Name:            cronObjectKey.Name,
+									Image:           sleepcycle.Spec.RunnerImage,
+									ImagePullPolicy: v1.PullIfNotPresent,
 									Env: []v1.EnvVar{
 										{
 											Name: "MY_POD_NAME",
